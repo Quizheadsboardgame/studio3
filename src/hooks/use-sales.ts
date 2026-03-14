@@ -47,7 +47,7 @@ export function useSales(profileId: string) {
     return collection(db, "profiles", profileId, "sales");
   }, [db, profileId, user]);
 
-  // If manager, also listen to staff sales to "feed through"
+  // If manager, we also need to manage and view the staff bucket
   const staffSalesRef = useMemoFirebase(() => {
     if (!db || !user || profileId !== 'manager') return null;
     return collection(db, "profiles", "staff", "sales");
@@ -75,7 +75,7 @@ export function useSales(profileId: string) {
     return [...primary, ...staff];
   }, [primarySalesData, staffSalesData, profileId]);
 
-  // Combine sellers if manager
+  // Combined Roster: Managers manage the staff roster too
   const sellers = useMemo(() => {
     const primary = sellersData || [];
     const staff = profileId === 'manager' ? (staffSellersData || []) : [];
@@ -104,27 +104,29 @@ export function useSales(profileId: string) {
     return result;
   }, [combinedSalesData]);
 
+  // Managers always provision to the 'staff' bucket so staff can log for them
   const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
-    if (!name || !sellersRef) return;
+    const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
+    if (!name || !targetRef) return;
+    
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
-    const docRef = doc(sellersRef, sellerId);
+    const docRef = doc(targetRef, sellerId);
     setDocumentNonBlocking(docRef, { id: sellerId, name, defaultCommission }, { merge: true });
-  }, [sellersRef]);
+  }, [sellersRef, staffSellersRef, profileId]);
 
   const removeSeller = useCallback((sellerId: string) => {
-    if (!sellerId || !sellersRef) return;
-    const docRef = doc(sellersRef, sellerId);
+    const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
+    if (!sellerId || !targetRef) return;
+    
+    const docRef = doc(targetRef, sellerId);
     deleteDocumentNonBlocking(docRef);
-  }, [sellersRef]);
+  }, [sellersRef, staffSellersRef, profileId]);
 
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
     
-    // Find the seller to get their default commission percentage
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
-    
-    // Calculate commission amount
     const commissionAmount = (price * commissionPercentage) / 100;
 
     const docRef = doc(salesRef);
@@ -140,12 +142,9 @@ export function useSales(profileId: string) {
   }, [salesRef, sellers]);
 
   const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>, origin?: string) => {
-    // If the sale originated from staff and we are manager, use staff ref
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
-
     if (!targetRef || !saleId) return;
 
-    // Recalculate commission if price is updated
     if (updatedFields.price !== undefined) {
       const existingSale = combinedSalesData.find(s => s.id === saleId);
       if (existingSale) {
@@ -161,7 +160,6 @@ export function useSales(profileId: string) {
 
   const deleteSale = useCallback((saleId: string, origin?: string) => {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
-
     if (!targetRef || !saleId) return;
     const docRef = doc(targetRef, saleId);
     deleteDocumentNonBlocking(docRef);

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -23,7 +24,8 @@ import {
   CreditCard,
   TrendingUp,
   Sparkles,
-  BarChart3
+  BarChart3,
+  LogOut
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,11 +109,11 @@ export default function Dashboard() {
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     
-    // Check for existing manager session on mount
+    // Restore manager session on mount
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
-      setProfileId('manager'); // Automatically switch to manager profile if authenticated
+      setProfileId('manager');
     }
   }, []);
 
@@ -246,6 +248,13 @@ export default function Dashboard() {
     setProfileId(newProfile);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_EXPIRY_KEY);
+    setIsManagerAuthenticated(false);
+    setProfileId('staff');
+    toast({ title: "Session Ended", description: "You have exited the Manager Vault." });
+  };
+
   const handlePasswordSubmit = () => {
     if (passwordInput === MANAGER_PASSWORD) {
       const expiryTime = new Date().getTime() + 24 * 60 * 60 * 1000;
@@ -366,11 +375,11 @@ export default function Dashboard() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="rounded-xl gap-2 shadow-sm border-primary/20 bg-card hover:bg-primary/5 transition-all h-11 px-6">
                 {profileId === 'manager' ? <ShieldCheck className="w-4 h-4 text-primary" /> : <UserCircle className="w-4 h-4 text-muted-foreground" />}
-                <span className="font-bold">Profile: {profileId.charAt(0).toUpperCase() + profileId.slice(1)}</span>
+                <span className="font-bold">Vault: {profileId.charAt(0).toUpperCase() + profileId.slice(1)}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-2xl border-primary/10">
-              <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Select Vault Profile</DropdownMenuLabel>
+              <DropdownMenuLabel className="px-3 py-2 text-xs font-black uppercase tracking-widest text-muted-foreground">Select Profile</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 cursor-pointer py-3 rounded-lg focus:bg-primary/5 transition-colors">
                 <ShieldCheck className="w-5 h-5 text-primary" /> 
@@ -386,6 +395,15 @@ export default function Dashboard() {
                   <span className="text-[10px] text-muted-foreground font-medium">Daily logging access</span>
                 </div>
               </DropdownMenuItem>
+              {isManagerAuthenticated && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="gap-3 cursor-pointer py-3 rounded-lg focus:bg-destructive/10 text-destructive transition-colors">
+                    <LogOut className="w-5 h-5" /> 
+                    <span className="font-bold">Exit Manager Vault</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
