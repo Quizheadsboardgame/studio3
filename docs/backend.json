@@ -39,6 +39,10 @@
           "type": "number",
           "description": "The sale price of the card, in the local currency (e.g., GBP)."
         },
+        "commission": {
+          "type": "number",
+          "description": "The commission amount designated for the manager from this sale."
+        },
         "saleDate": {
           "type": "string",
           "description": "The date when the sale was recorded, in YYYY-MM-DD format.",
