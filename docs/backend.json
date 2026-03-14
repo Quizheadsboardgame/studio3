@@ -14,6 +14,10 @@
         "name": {
           "type": "string",
           "description": "The full name of the seller."
+        },
+        "defaultCommission": {
+          "type": "number",
+          "description": "The default commission amount (in GBP) the manager earns per sale from this seller."
         }
       },
       "required": [

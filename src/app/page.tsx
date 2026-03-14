@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -75,11 +76,11 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
+  const [newSellerCommission, setNewSellerCommission] = useState("");
   const [activeTab, setActiveTab] = useState("");
 
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
-  const [newSaleCommission, setNewSaleCommission] = useState("");
 
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editCard, setEditCard] = useState("");
@@ -270,12 +271,10 @@ export default function Dashboard() {
 
   const handleAddSale = (sellerId: string) => {
     const priceNum = parseFloat(newSalePrice);
-    const commNum = parseFloat(newSaleCommission);
     if (newSaleCard.trim() && !isNaN(priceNum)) {
-      addSale(selectedDate, sellerId, newSaleCard.trim(), priceNum, isNaN(commNum) ? 0 : commNum);
+      addSale(selectedDate, sellerId, newSaleCard.trim(), priceNum);
       setNewSaleCard("");
       setNewSalePrice("");
-      setNewSaleCommission("");
     }
   };
 
@@ -369,7 +368,7 @@ export default function Dashboard() {
               return (
                 <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-5 rounded-2xl items-end ring-1 ring-black/5 shadow-inner">
-                    <div className="md:col-span-4 space-y-2">
+                    <div className="md:col-span-6 space-y-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Card Name</label>
                       <Input 
                         placeholder="Enter card name..." 
@@ -378,7 +377,7 @@ export default function Dashboard() {
                         onChange={(e) => setNewSaleCard(e.target.value)}
                       />
                     </div>
-                    <div className="md:col-span-3 space-y-2">
+                    <div className="md:col-span-4 space-y-2">
                       <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Sale Price (£)</label>
                       <Input 
                         type="number" 
@@ -387,17 +386,6 @@ export default function Dashboard() {
                         className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
                         value={newSalePrice}
                         onChange={(e) => setNewSalePrice(e.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Manager Commission (£)</label>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00" 
-                        className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
-                        value={newSaleCommission}
-                        onChange={(e) => setNewSaleCommission(e.target.value)}
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -727,24 +715,34 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-6">
             {isManagerAuthenticated && (
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="New seller name..." 
-                  className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
-                  value={newSellerName}
-                  onChange={(e) => setNewSellerName(e.target.value)}
-                />
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input 
+                    placeholder="Seller name..." 
+                    className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
+                    value={newSellerName}
+                    onChange={(e) => setNewSellerName(e.target.value)}
+                  />
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    placeholder="Commission (£)..." 
+                    className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
+                    value={newSellerCommission}
+                    onChange={(e) => setNewSellerCommission(e.target.value)}
+                  />
+                </div>
                 <Button 
-                  size="icon" 
-                  className="h-12 w-12 rounded-xl shadow-lg"
+                  className="w-full h-12 rounded-xl shadow-lg font-bold"
                   onClick={() => {
                     if (newSellerName) {
-                      addSeller(newSellerName);
+                      addSeller(newSellerName, parseFloat(newSellerCommission) || 0);
                       setNewSellerName("");
+                      setNewSellerCommission("");
                     }
                   }}
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-5 h-5 mr-2" /> Add Seller with Commission
                 </Button>
               </div>
             )}
@@ -757,7 +755,12 @@ export default function Dashboard() {
                     variant="secondary" 
                     className={`pl-4 ${isManagerAuthenticated ? 'pr-2' : 'pr-4'} py-2 flex items-center gap-2 group cursor-default rounded-xl bg-card border-none shadow-sm ring-1 ring-black/5 text-sm font-bold transition-all`}
                   >
-                    {s.name}
+                    <div className="flex flex-col items-start gap-0.5">
+                      <span>{s.name}</span>
+                      {isManagerAuthenticated && (
+                        <span className="text-[10px] text-emerald-600">£{(s.defaultCommission || 0).toFixed(2)} comm/sale</span>
+                      )}
+                    </div>
                     {isManagerAuthenticated && (
                       <button 
                         onClick={() => removeSeller(s.id)}

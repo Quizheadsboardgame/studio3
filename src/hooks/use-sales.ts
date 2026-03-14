@@ -29,6 +29,7 @@ export type Sale = {
 export type Seller = {
   id: string;
   name: string;
+  defaultCommission?: number;
 };
 
 export function useSales(profileId: string) {
@@ -86,11 +87,11 @@ export function useSales(profileId: string) {
     return result;
   }, [combinedSalesData]);
 
-  const addSeller = useCallback((name: string) => {
+  const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
     if (!name || !sellersRef) return;
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
     const docRef = doc(sellersRef, sellerId);
-    setDocumentNonBlocking(docRef, { id: sellerId, name }, { merge: true });
+    setDocumentNonBlocking(docRef, { id: sellerId, name, defaultCommission }, { merge: true });
   }, [sellersRef]);
 
   const removeSeller = useCallback((sellerId: string) => {
@@ -99,8 +100,13 @@ export function useSales(profileId: string) {
     deleteDocumentNonBlocking(docRef);
   }, [sellersRef]);
 
-  const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number, commission: number = 0) => {
+  const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
+    
+    // Find the seller to get their default commission
+    const seller = sellers.find(s => s.id === sellerId);
+    const commission = seller?.defaultCommission || 0;
+
     const docRef = doc(salesRef);
     const saleId = docRef.id;
     setDocumentNonBlocking(docRef, {
@@ -111,7 +117,7 @@ export function useSales(profileId: string) {
       saleDate: date,
       sellerId: sellerId,
     }, { merge: true });
-  }, [salesRef]);
+  }, [salesRef, sellers]);
 
   const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>, origin?: string) => {
     const targetRef = origin === 'staff' && profileId === 'manager' && staffSalesRef 
