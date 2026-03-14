@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -19,7 +18,8 @@ import {
   ShieldCheck,
   UserCircle,
   Lock,
-  Settings2
+  Settings2,
+  Users
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,7 +77,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerCommission, setNewSellerCommission] = useState("");
-  const [activeTab, setActiveTab] = useState("");
+  const [activeTab, setActiveTab] = useState("all");
 
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
@@ -85,10 +85,11 @@ export default function Dashboard() {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
-  const [editCommission, setEditCommission] = useState("");
 
   useEffect(() => {
+    // Avoid hydration mismatch by setting date in useEffect
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
+    
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
@@ -102,12 +103,16 @@ export default function Dashboard() {
   }, [user, isUserLoading, auth]);
 
   useEffect(() => {
-    if (sellers.length > 0 && (!activeTab || !sellers.find(s => s.id === activeTab))) {
-      setActiveTab(sellers[0].id);
+    if (sellers.length > 0 && activeTab !== "all" && !sellers.find(s => s.id === activeTab)) {
+      setActiveTab("all");
     }
   }, [sellers, activeTab]);
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
+
+  const allDailySales = useMemo(() => {
+    return Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+  }, [dailySalesData]);
 
   const dailyStats = useMemo(() => {
     let totalSales = 0;
@@ -246,24 +251,20 @@ export default function Dashboard() {
     setEditingSaleId(sale.id);
     setEditCard(sale.cardName);
     setEditPrice(sale.price.toString());
-    setEditCommission(sale.commission?.toString() || "0");
   };
 
   const cancelEditing = () => {
     setEditingSaleId(null);
     setEditCard("");
     setEditPrice("");
-    setEditCommission("");
   };
 
   const handleUpdateSale = (saleId: string, origin?: string) => {
     const priceNum = parseFloat(editPrice);
-    const commNum = parseFloat(editCommission);
     if (editCard.trim() && !isNaN(priceNum)) {
       updateSale(saleId, { 
         cardName: editCard.trim(), 
-        price: priceNum,
-        commission: isNaN(commNum) ? 0 : commNum
+        price: priceNum
       }, origin);
       cancelEditing();
     }
@@ -355,6 +356,9 @@ export default function Dashboard() {
               </div>
               <ScrollArea className="max-w-full">
                 <TabsList className="bg-muted/50 p-1 mb-2">
+                  <TabsTrigger value="all" className="px-6 data-[state=active]:bg-card rounded-lg transition-all font-bold">
+                    <Users className="w-3.5 h-3.5 mr-2" /> All Sellers
+                  </TabsTrigger>
                   {sellers.map((s) => (
                     <TabsTrigger key={s.id} value={s.id} className="px-6 data-[state=active]:bg-card rounded-lg transition-all">
                       {s.name}
@@ -365,6 +369,122 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
+            <TabsContent value="all" className="space-y-6 mt-0 focus-visible:outline-none">
+              <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
+                <Table>
+                  <TableHeader className="bg-muted/30">
+                    <TableRow>
+                      <TableHead className="font-bold">Seller</TableHead>
+                      <TableHead className="font-bold">Card Detail</TableHead>
+                      <TableHead className="text-right font-bold">Sale Amount</TableHead>
+                      {showComm && <TableHead className="text-right font-bold">Commission</TableHead>}
+                      {isManagerAuthenticated && <TableHead className="w-[100px]"></TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allDailySales.length > 0 ? (
+                      allDailySales.map((sale) => {
+                        const seller = sellers.find(s => s.id === sale.sellerId);
+                        const isEditing = editingSaleId === sale.id;
+                        return (
+                          <TableRow key={sale.id} className="hover:bg-muted/20 transition-colors">
+                            <TableCell className="font-bold text-muted-foreground">
+                              <Badge variant="secondary" className="bg-muted/50 text-foreground font-semibold">
+                                {seller?.name || sale.sellerId}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {isEditing ? (
+                                <Input 
+                                  className="h-8 py-0" 
+                                  value={editCard} 
+                                  onChange={(e) => setEditCard(e.target.value)}
+                                />
+                              ) : (
+                                <span className="font-semibold text-foreground/90">{sale.cardName}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {isEditing ? (
+                                <div className="flex justify-end">
+                                  <Input 
+                                    className="h-8 py-0 w-24 text-right" 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={editPrice} 
+                                    onChange={(e) => setEditPrice(e.target.value)} 
+                                  />
+                                </div>
+                              ) : (
+                                <span className="font-bold text-primary">£{sale.price.toFixed(2)}</span>
+                              )}
+                            </TableCell>
+                            {showComm && (
+                              <TableCell className="text-right">
+                                <span className="font-bold text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
+                              </TableCell>
+                            )}
+                            {isManagerAuthenticated && (
+                              <TableCell>
+                                <div className="flex items-center gap-1 justify-end">
+                                  {isEditing ? (
+                                    <>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
+                                        <Check className="w-4 h-4" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted" onClick={cancelEditing}>
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => startEditing(sale)}>
+                                        <Pencil className="w-4 h-4" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={showComm ? 5 : 4} className="h-32 text-center text-muted-foreground/60 italic">
+                          No logs found for any seller on {selectedDate}.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-col md:flex-row justify-end pt-2 gap-4">
+                {isManagerAuthenticated && (
+                  <div className="flex flex-col gap-2 bg-emerald-50 border border-emerald-100 px-6 py-4 rounded-2xl">
+                    <div className="flex justify-between items-center gap-8">
+                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-700/70">Total Shared Comm:</span>
+                      <span className="text-xl font-black text-emerald-700">£{dailyStats.totalCommission.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center gap-8 border-t border-emerald-200 pt-2">
+                      <span className="text-xs font-bold uppercase tracking-widest text-emerald-700/70">Net Seller Payouts:</span>
+                      <span className="text-xl font-black text-emerald-900">£{(dailyStats.totalSales - dailyStats.totalCommission).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="bg-primary shadow-xl shadow-primary/20 px-8 py-4 rounded-2xl border border-white/10 text-white flex items-center justify-center">
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-80">Aggregate Daily Total</span>
+                    <span className="text-2xl font-black">£{dailyStats.totalSales.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
             {sellers.map((s) => {
               const sellerDailySales = dailySalesData[s.id] || [];
               const sellerDailyTotal = sellerDailySales.reduce((acc, curr) => acc + curr.price, 0);
@@ -458,19 +578,7 @@ export default function Dashboard() {
                                 </TableCell>
                                 {showComm && (
                                   <TableCell className="text-right">
-                                    {isEditing ? (
-                                      <div className="flex justify-end">
-                                        <Input 
-                                          className="h-8 py-0 w-24 text-right" 
-                                          type="number" 
-                                          step="0.01" 
-                                          value={editCommission} 
-                                          onChange={(e) => setEditCommission(e.target.value)} 
-                                        />
-                                      </div>
-                                    ) : (
-                                      <span className="font-bold text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
-                                    )}
+                                    <span className="font-bold text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
                                   </TableCell>
                                 )}
                                 {isManagerAuthenticated && (
@@ -638,11 +746,16 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     {recentActivity.map((act, i) => (
                       <div key={i} className="flex justify-between items-center text-sm bg-muted/20 p-3 rounded-xl border border-black/5 hover:bg-muted/40 transition-colors">
-                        <div className="space-y-0.5">
+                        <div className="space-y-1">
                           <div className="font-bold text-foreground/90">{act.card}</div>
-                          <div className="text-xs font-bold text-muted-foreground/70 flex items-center gap-1 uppercase tracking-tighter">
-                            {act.sellerName} <span className="text-[10px] opacity-40">•</span> {act.date}
-                            {act.origin === 'staff' && isManagerAuthenticated && <span className="ml-1 text-[8px] text-primary/70 bg-primary/5 px-1 rounded">STAFF</span>}
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest py-0 px-2 bg-card">
+                              {act.sellerName}
+                            </Badge>
+                            <span className="text-[10px] font-bold text-muted-foreground/60 uppercase">{act.date}</span>
+                            {act.origin === 'staff' && isManagerAuthenticated && (
+                              <Badge variant="outline" className="text-[8px] text-primary/70 bg-primary/5 px-1 rounded border-primary/20">STAFF</Badge>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end">
