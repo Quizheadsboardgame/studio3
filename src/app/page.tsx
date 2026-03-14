@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
+import html2canvas from "html2canvas";
 import { 
   Plus, 
   Search, 
@@ -22,9 +23,9 @@ import {
   Activity,
   CreditCard,
   TrendingUp,
-  ChevronRight,
   Sparkles,
-  BarChart3
+  BarChart3,
+  Camera
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,6 +105,7 @@ export default function Dashboard() {
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
@@ -302,6 +304,33 @@ export default function Dashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleSaveReportAsImage = async (sellerId: string) => {
+    const element = document.getElementById(`report-content-${sellerId}`);
+    if (!element) return;
+
+    setIsCapturing(true);
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        logging: false,
+        useCORS: true,
+      });
+      
+      const image = canvas.toDataURL("image/png", 1.0);
+      const link = document.createElement("a");
+      link.download = `NC_Report_${sellerId}_${selectedDate}.png`;
+      link.href = image;
+      link.click();
+      toast({ title: "Report Saved", description: "Sales report image has been downloaded." });
+    } catch (error) {
+      console.error("Capture failed", error);
+      toast({ variant: "destructive", title: "Capture Failed", description: "Could not save report image." });
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   const startEditing = (sale: Sale) => {
@@ -811,120 +840,134 @@ export default function Dashboard() {
 
                 return (
                   <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
-                    <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
-                      <Table>
-                        <TableHeader className="bg-muted/30">
-                          <TableRow className="border-none hover:bg-transparent">
-                            <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Timestamp</TableHead>
-                            <TableHead className="font-black uppercase tracking-widest text-[10px] h-14">Card Detail</TableHead>
-                            <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Sale Price</TableHead>
-                            {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Commission</TableHead>}
-                            <TableHead className="w-[120px] pr-6"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sellerDailySales.length > 0 ? (
-                            sellerDailySales.map((sale) => {
-                              const isEditing = editingSaleId === sale.id;
-                              return (
-                                <TableRow key={sale.id} className="hover:bg-primary/[0.02] border-muted/30 group transition-all duration-300">
-                                  <TableCell className="text-[10px] text-muted-foreground font-black pl-6 uppercase tracking-tighter">
-                                    {selectedDate}
-                                    {sale.profileOrigin === 'staff' && isManagerAuthenticated && (
-                                      <Badge variant="outline" className="ml-2 text-[8px] h-4 uppercase bg-primary/5 text-primary border-primary/20">Staff Origin</Badge>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {isEditing ? (
-                                      <Input 
-                                        className="h-9 font-bold bg-muted/50 border-none rounded-lg" 
-                                        value={editCard} 
-                                        onChange={(e) => setEditCard(e.target.value)}
-                                      />
-                                    ) : (
-                                      <span className="font-bold text-foreground/90">{sale.cardName}</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {isEditing ? (
-                                      <div className="flex justify-end">
-                                        <Input 
-                                          className="h-9 w-28 text-right font-black bg-muted/50 border-none rounded-lg" 
-                                          type="number" 
-                                          step="0.01" 
-                                          value={editPrice} 
-                                          onChange={(e) => setEditPrice(e.target.value)} 
-                                        />
-                                      </div>
-                                    ) : (
-                                      <span className="font-black text-primary">£{sale.price.toFixed(2)}</span>
-                                    )}
-                                  </TableCell>
-                                  {isManagerAuthenticated && (
-                                    <TableCell className="text-right">
-                                      <span className="font-black text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
-                                    </TableCell>
-                                  )}
-                                  <TableCell className="pr-6">
-                                    <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                      {isEditing ? (
-                                        <>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
-                                            <Check className="w-4 h-4" />
-                                          </Button>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={cancelEditing}>
-                                            <X className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => startEditing(sale)}>
-                                            <Pencil className="w-4 h-4" />
-                                          </Button>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
-                                            <Trash2 className="w-4 h-4" />
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={isManagerAuthenticated ? 5 : 4} className="h-48 text-center text-muted-foreground/60 italic font-medium">
-                                No logs found for this seller on {selectedDate}.
-                              </TableCell>
+                    <div id={`report-content-${s.id}`} className="space-y-6 p-4 rounded-3xl bg-white border border-transparent">
+                      <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
+                        <Table>
+                          <TableHeader className="bg-muted/30">
+                            <TableRow className="border-none hover:bg-transparent">
+                              <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Timestamp</TableHead>
+                              <TableHead className="font-black uppercase tracking-widest text-[10px] h-14">Card Detail</TableHead>
+                              <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Sale Price</TableHead>
+                              {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Commission</TableHead>}
+                              <TableHead className="w-[120px] pr-6"></TableHead>
                             </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    
-                    <div className="flex flex-col md:flex-row justify-end pt-6 gap-6">
-                      {isManagerAuthenticated && (
-                        <div className="flex flex-col gap-3 bg-emerald-50 border border-emerald-100 px-8 py-6 rounded-3xl shadow-sm">
-                          <div className="flex justify-between items-center gap-12">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                               <TrendingUp className="w-3 h-3" /> Total Earned Cut
-                            </span>
-                            <span className="text-2xl font-black text-emerald-700">£{sellerDailyComm.toFixed(2)}</span>
+                          </TableHeader>
+                          <TableBody>
+                            {sellerDailySales.length > 0 ? (
+                              sellerDailySales.map((sale) => {
+                                const isEditing = editingSaleId === sale.id;
+                                return (
+                                  <TableRow key={sale.id} className="hover:bg-primary/[0.02] border-muted/30 group transition-all duration-300">
+                                    <TableCell className="text-[10px] text-muted-foreground font-black pl-6 uppercase tracking-tighter">
+                                      {selectedDate}
+                                      {sale.profileOrigin === 'staff' && isManagerAuthenticated && (
+                                        <Badge variant="outline" className="ml-2 text-[8px] h-4 uppercase bg-primary/5 text-primary border-primary/20">Staff Origin</Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {isEditing ? (
+                                        <Input 
+                                          className="h-9 font-bold bg-muted/50 border-none rounded-lg" 
+                                          value={editCard} 
+                                          onChange={(e) => setEditCard(e.target.value)}
+                                        />
+                                      ) : (
+                                        <span className="font-bold text-foreground/90">{sale.cardName}</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {isEditing ? (
+                                        <div className="flex justify-end">
+                                          <Input 
+                                            className="h-9 w-28 text-right font-black bg-muted/50 border-none rounded-lg" 
+                                            type="number" 
+                                            step="0.01" 
+                                            value={editPrice} 
+                                            onChange={(e) => setEditPrice(e.target.value)} 
+                                          />
+                                        </div>
+                                      ) : (
+                                        <span className="font-black text-primary">£{sale.price.toFixed(2)}</span>
+                                      )}
+                                    </TableCell>
+                                    {isManagerAuthenticated && (
+                                      <TableCell className="text-right">
+                                        <span className="font-black text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
+                                      </TableCell>
+                                    )}
+                                    <TableCell className="pr-6">
+                                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {isEditing ? (
+                                          <>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
+                                              <Check className="w-4 h-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={cancelEditing}>
+                                              <X className="w-4 h-4" />
+                                            </Button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => startEditing(sale)}>
+                                              <Pencil className="w-4 h-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
+                                              <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            ) : (
+                              <TableRow>
+                                <TableCell colSpan={isManagerAuthenticated ? 5 : 4} className="h-32 text-center text-muted-foreground/60 italic">
+                                  No logs found for this seller on {selectedDate}.
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      <div className="flex flex-col md:flex-row justify-end gap-6">
+                        {isManagerAuthenticated && (
+                          <div className="flex flex-col gap-3 bg-emerald-50 border border-emerald-100 px-8 py-6 rounded-3xl shadow-sm">
+                            <div className="flex justify-between items-center gap-12">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
+                                 <TrendingUp className="w-3 h-3" /> Total Earned Cut
+                              </span>
+                              <span className="text-2xl font-black text-emerald-700">£{sellerDailyComm.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between items-center gap-12 border-t border-emerald-200 pt-3">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
+                                 <CreditCard className="w-3 h-3" /> Seller Payout Run-down
+                              </span>
+                              <span className="text-2xl font-black text-emerald-900">£{sellerPayout.toFixed(2)}</span>
+                            </div>
                           </div>
-                          <div className="flex justify-between items-center gap-12 border-t border-emerald-200 pt-3">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                               <CreditCard className="w-3 h-3" /> Seller Payout Run-down
-                            </span>
-                            <span className="text-2xl font-black text-emerald-900">£{sellerPayout.toFixed(2)}</span>
+                        )}
+                        <div className="bg-primary shadow-2xl shadow-primary/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Seller Daily Gross</span>
+                            <span className="text-4xl font-black">£{sellerDailyTotal.toFixed(2)}</span>
                           </div>
-                        </div>
-                      )}
-                      <div className="bg-primary shadow-2xl shadow-primary/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center transform hover:scale-[1.02] transition-transform">
-                        <div className="flex flex-col items-center">
-                          <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Seller Daily Gross</span>
-                          <span className="text-4xl font-black">£{sellerDailyTotal.toFixed(2)}</span>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="flex justify-center pt-4">
+                      <Button 
+                        onClick={() => handleSaveReportAsImage(s.id)}
+                        disabled={isCapturing || sellerDailySales.length === 0}
+                        variant="outline"
+                        className="rounded-xl h-12 px-8 gap-3 font-black uppercase tracking-widest text-[10px] border-primary/20 hover:bg-primary/5 shadow-sm"
+                      >
+                        {isCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                        Save Report as Photo
+                      </Button>
                     </div>
                   </TabsContent>
                 );
