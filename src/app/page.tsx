@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -412,7 +411,7 @@ export default function Dashboard() {
                           <TableHead className="font-bold">Card Detail</TableHead>
                           <TableHead className="text-right font-bold">Sale Amount</TableHead>
                           {showComm && <TableHead className="text-right font-bold">Commission</TableHead>}
-                          <TableHead className="w-[100px]"></TableHead>
+                          {isManagerAuthenticated && <TableHead className="w-[100px]"></TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -470,35 +469,37 @@ export default function Dashboard() {
                                     )}
                                   </TableCell>
                                 )}
-                                <TableCell>
-                                  <div className="flex items-center gap-1 justify-end">
-                                    {isEditing ? (
-                                      <>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
-                                          <Check className="w-4 h-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted" onClick={cancelEditing}>
-                                          <X className="w-4 h-4" />
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => startEditing(sale)}>
-                                          <Pencil className="w-4 h-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
-                                          <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                </TableCell>
+                                {isManagerAuthenticated && (
+                                  <TableCell>
+                                    <div className="flex items-center gap-1 justify-end">
+                                      {isEditing ? (
+                                        <>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
+                                            <Check className="w-4 h-4" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted" onClick={cancelEditing}>
+                                            <X className="w-4 h-4" />
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => startEditing(sale)}>
+                                            <Pencil className="w-4 h-4" />
+                                          </Button>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
+                                            <Trash2 className="w-4 h-4" />
+                                          </Button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                )}
                               </TableRow>
                             );
                           })
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={showComm ? 5 : 4} className="h-32 text-center text-muted-foreground/60 italic">
+                            <TableCell colSpan={isManagerAuthenticated ? (showComm ? 5 : 4) : (showComm ? 4 : 3)} className="h-32 text-center text-muted-foreground/60 italic">
                               No logs found for this seller on {selectedDate}.
                             </TableCell>
                           </TableRow>
