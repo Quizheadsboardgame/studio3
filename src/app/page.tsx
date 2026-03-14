@@ -14,7 +14,11 @@ import {
   X,
   History,
   Coins,
-  Loader2
+  Loader2,
+  LogIn,
+  LogOut,
+  User as UserIcon,
+  Cloud
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,17 +29,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
-import { useAuth, useUser, initiateAnonymousSignIn } from "@/firebase";
+import { 
+  useAuth, 
+  useUser, 
+  initiateAnonymousSignIn, 
+  initiateGoogleSignIn, 
+  initiateSignOut 
+} from "@/firebase";
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales();
   
-  const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
+  const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
   const [activeTab, setActiveTab] = useState("");
@@ -51,6 +70,11 @@ export default function Dashboard() {
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
 
+  // Handle Hydration Mismatch for Date
+  useEffect(() => {
+    setSelectedDate(format(new Date(), "yyyy-MM-dd"));
+  }, []);
+
   // Handle Authentication
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
@@ -58,8 +82,9 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, auth]);
 
+  // Set default active tab
   useEffect(() => {
-    if (sellers.length > 0 && !activeTab) {
+    if (sellers.length > 0 && (!activeTab || !sellers.find(s => s.id === activeTab))) {
       setActiveTab(sellers[0].id);
     }
   }, [sellers, activeTab]);
@@ -238,41 +263,85 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary">NewtCollect Analytics</h1>
-          <p className="text-muted-foreground">Professional Vault & Sales Management (Synced)</p>
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex items-center gap-4">
+          <div className="bg-primary/10 p-2.5 rounded-xl">
+            <Coins className="w-8 h-8 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-primary">NewtCollect</h1>
+            <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium">
+              <Cloud className="w-4 h-4 text-emerald-600" />
+              Real-time Vault Sync Enabled
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-2 bg-card border rounded-xl px-4 py-2 shadow-sm">
             <CalendarIcon className="w-4 h-4 text-primary" />
             <input 
               type="date" 
-              className="bg-transparent outline-none text-sm" 
+              className="bg-transparent outline-none text-sm font-semibold" 
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
             />
           </div>
-          <Button onClick={handleExportCSV} variant="outline" className="gap-2 shadow-sm">
-            <Download className="w-4 h-4" /> Export All Data
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary/50 transition-colors">
+                  <AvatarImage src={user?.photoURL || ""} alt={user?.displayName || "User"} />
+                  <AvatarFallback className="bg-primary/5 text-primary font-bold">
+                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || <UserIcon className="w-5 h-5" />}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-bold leading-none">{user?.displayName || "Newton's Collector"}</p>
+                  <p className="text-xs leading-none text-muted-foreground truncate">
+                    {user?.isAnonymous ? "Guest Mode (Local Sync)" : user?.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {user?.isAnonymous ? (
+                <DropdownMenuItem onClick={() => initiateGoogleSignIn(auth!)} className="gap-2 cursor-pointer font-medium text-primary">
+                  <LogIn className="w-4 h-4" /> Sign in with Google
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => initiateSignOut(auth!)} className="gap-2 cursor-pointer font-medium text-destructive">
+                  <LogOut className="w-4 h-4" /> Sign Out
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          <Button onClick={handleExportCSV} variant="outline" className="rounded-xl gap-2 shadow-sm">
+            <Download className="w-4 h-4" /> Export
           </Button>
         </div>
       </header>
 
       {/* Seller Logs - Main Entry Point */}
-      <Card className="shadow-lg border-none overflow-hidden">
+      <Card className="shadow-2xl border-none overflow-hidden rounded-2xl ring-1 ring-black/5">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <CardHeader className="pb-0 border-b bg-muted/20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-xl">Daily Sales Logs</CardTitle>
-                <Badge variant="outline" className="bg-white/50">{selectedDate}</Badge>
+                <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                  {selectedDate}
+                </Badge>
               </div>
               <ScrollArea className="max-w-full">
                 <TabsList className="bg-muted/50 p-1 mb-2">
                   {sellers.map((s) => (
-                    <TabsTrigger key={s.id} value={s.id} className="px-6 data-[state=active]:bg-card">
+                    <TabsTrigger key={s.id} value={s.id} className="px-6 data-[state=active]:bg-card rounded-lg transition-all">
                       {s.name}
                     </TabsTrigger>
                   ))}
@@ -283,22 +352,24 @@ export default function Dashboard() {
           <CardContent className="pt-6 space-y-6">
             {sellers.map((s) => (
               <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-4 rounded-lg items-end">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-5 rounded-2xl items-end ring-1 ring-black/5 shadow-inner">
                   <div className="md:col-span-6 space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Card Name</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Card Name</label>
                     <Input 
                       placeholder="Enter card name..." 
+                      className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
                       value={newSaleCard}
                       onChange={(e) => setNewSaleCard(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s.id)}
                     />
                   </div>
                   <div className="md:col-span-4 space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sale Price (£)</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Sale Price (£)</label>
                     <Input 
                       type="number" 
                       step="0.01" 
                       placeholder="0.00" 
+                      className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
                       value={newSalePrice}
                       onChange={(e) => setNewSalePrice(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s.id)}
@@ -306,22 +377,22 @@ export default function Dashboard() {
                   </div>
                   <div className="md:col-span-2">
                     <Button 
-                      className="w-full" 
+                      className="w-full shadow-lg shadow-primary/20 h-10 rounded-xl" 
                       onClick={() => handleAddSale(s.id)}
                       disabled={!newSaleCard.trim() || !newSalePrice}
                     >
-                      <Plus className="w-4 h-4 mr-2" /> Add Entry
+                      <Plus className="w-4 h-4 mr-2" /> Add Log
                     </Button>
                   </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden bg-card">
+                <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
                   <Table>
-                    <TableHeader className="bg-muted/50">
+                    <TableHeader className="bg-muted/30">
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Card Name</TableHead>
-                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="font-bold">Log Time</TableHead>
+                        <TableHead className="font-bold">Card Detail</TableHead>
+                        <TableHead className="text-right font-bold">Sale Amount</TableHead>
                         <TableHead className="w-[100px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -330,8 +401,8 @@ export default function Dashboard() {
                         dailySalesData[s.id].map((sale) => {
                           const isEditing = editingSaleId === sale.id;
                           return (
-                            <TableRow key={sale.id}>
-                              <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
+                            <TableRow key={sale.id} className="hover:bg-muted/20 transition-colors">
+                              <TableCell className="text-xs text-muted-foreground font-mono">{selectedDate}</TableCell>
                               <TableCell>
                                 {isEditing ? (
                                   <Input 
@@ -342,7 +413,7 @@ export default function Dashboard() {
                                     autoFocus
                                   />
                                 ) : (
-                                  <span className="font-medium">{sale.cardName}</span>
+                                  <span className="font-semibold text-foreground/90">{sale.cardName}</span>
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
@@ -358,7 +429,7 @@ export default function Dashboard() {
                                     />
                                   </div>
                                 ) : (
-                                  <span className="font-semibold">£{sale.price.toFixed(2)}</span>
+                                  <span className="font-bold text-primary">£{sale.price.toFixed(2)}</span>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -409,8 +480,8 @@ export default function Dashboard() {
                         })
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                            No sales recorded for this date.
+                          <TableCell colSpan={4} className="h-32 text-center text-muted-foreground/60 italic">
+                            No logs found for this seller on {selectedDate}.
                           </TableCell>
                         </TableRow>
                       )}
@@ -419,9 +490,9 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="flex justify-end pt-2">
-                  <div className="bg-primary/5 px-6 py-3 rounded-lg border border-primary/10">
-                    <span className="text-sm text-muted-foreground mr-4">{s.name} Total ({selectedDate}):</span>
-                    <span className="text-xl font-bold text-primary">
+                  <div className="bg-primary shadow-xl shadow-primary/20 px-8 py-4 rounded-2xl border border-white/10 text-white">
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-80 mr-4">{s.name} Daily Total:</span>
+                    <span className="text-2xl font-black">
                       £{(dailySalesData[s.id]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
                     </span>
                   </div>
@@ -435,121 +506,128 @@ export default function Dashboard() {
       {/* Analytics Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Daily Stats Section */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            <CalendarIcon className="w-4 h-4 text-primary" /> Daily Performance
+        <div className="space-y-6">
+          <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
+            <div className="bg-primary/10 p-1.5 rounded-lg"><CalendarIcon className="w-5 h-5 text-primary" /></div>
+            Daily Dashboard
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border-none shadow-md bg-white">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Sales Total</CardTitle>
+            <Card className="border-none shadow-lg bg-card rounded-2xl">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Sales Total</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold">£{dailyStats.totalSales.toFixed(2)}</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-primary">£{dailyStats.totalSales.toFixed(2)}</div>
               </CardContent>
             </Card>
-            <Card className="border-none shadow-md bg-white">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Volume</CardTitle>
+            <Card className="border-none shadow-lg bg-card rounded-2xl">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Volume</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold">{dailyStats.totalCards} cards</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black">{dailyStats.totalCards} cards</div>
               </CardContent>
             </Card>
-            <Card className="border-none shadow-md bg-white">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Top Daily</CardTitle>
+            <Card className="border-none shadow-lg bg-card rounded-2xl">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Top Daily</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold truncate">{dailyStats.topSellerName}</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black truncate text-primary">{dailyStats.topSellerName}</div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="shadow-lg border-none bg-gradient-to-br from-primary/5 to-accent/10">
+          <Card className="shadow-2xl border-none bg-gradient-to-br from-primary/5 to-accent/10 rounded-2xl ring-1 ring-black/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BrainCircuit className="w-4 h-4 text-primary" /> Market Insights
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <BrainCircuit className="w-5 h-5 text-primary" /> AI Market Analyzer
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {aiSummary ? (
-                <ScrollArea className="h-[120px] rounded-md border p-4 bg-card/50">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
+                <ScrollArea className="h-[140px] rounded-xl border-none p-5 bg-card/80 shadow-inner">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium text-foreground/80">{aiSummary}</p>
                 </ScrollArea>
               ) : (
-                <div className="h-[120px] flex items-center justify-center border border-dashed rounded-md bg-white/30">
-                  <p className="text-xs text-muted-foreground text-center px-8">
-                    Generate AI summary for {selectedDate}
+                <div className="h-[140px] flex items-center justify-center border-2 border-dashed border-primary/20 rounded-2xl bg-white/30">
+                  <p className="text-xs font-bold text-muted-foreground/60 text-center px-12 uppercase tracking-widest">
+                    Run analyzer for {selectedDate}
                   </p>
                 </div>
               )}
               <Button 
-                size="sm"
-                className="w-full bg-primary hover:bg-primary/90 text-white" 
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-12 rounded-xl shadow-xl shadow-primary/30" 
                 onClick={handleGenerateAiSummary}
                 disabled={isAiLoading || dailyStats.totalSales === 0}
               >
-                {isAiLoading ? "Processing..." : "Generate Insights"}
+                {isAiLoading ? "Analyzing Vault Data..." : "Generate AI Insights"}
               </Button>
             </CardContent>
           </Card>
         </div>
 
         {/* All-Time Vault Section */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-bold flex items-center gap-2">
-            <Coins className="w-4 h-4 text-emerald-600" /> Vault Lifetime Stats
+        <div className="space-y-6">
+          <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
+            <div className="bg-emerald-100 p-1.5 rounded-lg"><Coins className="w-5 h-5 text-emerald-600" /></div>
+            The Vault Lifetime
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border-none shadow-md bg-emerald-50/50">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Vault Value</CardTitle>
+            <Card className="border-none shadow-lg bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70">Vault Value</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
               </CardContent>
             </Card>
-            <Card className="border-none shadow-md bg-emerald-50/50">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">Total Sold</CardTitle>
+            <Card className="border-none shadow-lg bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70">Total Sold</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold text-emerald-700">{allTimeStats.totalCards}</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-emerald-700">{allTimeStats.totalCards}</div>
               </CardContent>
             </Card>
-            <Card className="border-none shadow-md bg-emerald-50/50">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-xs font-medium text-muted-foreground">MVP Seller</CardTitle>
+            <Card className="border-none shadow-lg bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10">
+              <CardHeader className="p-5 pb-2">
+                <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70">MVP Seller</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-bold text-emerald-700 truncate">{allTimeStats.topSeller}</div>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-emerald-700 truncate">{allTimeStats.topSeller}</div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="shadow-md border-none h-[220px]">
+          <Card className="shadow-2xl border-none h-[255px] rounded-2xl ring-1 ring-black/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <History className="w-4 h-4 text-primary" /> Recent Activity
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <History className="w-5 h-5 text-primary" /> Live Transaction Feed
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[140px]">
+              <ScrollArea className="h-[180px]">
                 {recentActivity.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {recentActivity.map((act, i) => (
-                      <div key={i} className="flex justify-between items-center text-xs border-b pb-2 last:border-0 last:pb-0">
+                      <div key={i} className="flex justify-between items-center text-sm bg-muted/20 p-3 rounded-xl border border-black/5 hover:bg-muted/40 transition-colors">
                         <div className="space-y-0.5">
-                          <div className="font-semibold">{act.card}</div>
-                          <div className="text-muted-foreground">{act.sellerName} • {act.date}</div>
+                          <div className="font-bold text-foreground/90">{act.card}</div>
+                          <div className="text-xs font-bold text-muted-foreground/70 flex items-center gap-1 uppercase tracking-tighter">
+                            {act.sellerName} <span className="text-[10px] opacity-40">•</span> {act.date}
+                          </div>
                         </div>
-                        <div className="font-bold text-primary">£{act.price.toFixed(2)}</div>
+                        <div className="font-black text-primary bg-white/80 px-3 py-1 rounded-lg shadow-sm border border-black/5">
+                          £{act.price.toFixed(2)}
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-xs text-muted-foreground py-8">No records found in vault.</p>
+                  <p className="text-center text-xs font-bold text-muted-foreground/60 py-12 uppercase tracking-widest italic">
+                    The vault is empty.
+                  </p>
                 )}
               </ScrollArea>
             </CardContent>
@@ -557,43 +635,45 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <Separator />
+      <Separator className="bg-black/5 h-[1px]" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Global Search */}
-        <Card className="shadow-md border-none">
+        <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Search Vault History</CardTitle>
+            <CardTitle className="text-lg font-black tracking-tight">Vault Search</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
               <Input 
-                placeholder="Find any card from any date..." 
-                className="pl-9"
+                placeholder="Find any card in vault history..." 
+                className="pl-11 h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             {searchQuery && (
-              <ScrollArea className="mt-4 h-[200px] border rounded-md">
+              <ScrollArea className="mt-6 h-[220px] border-none bg-muted/10 rounded-2xl shadow-inner p-4">
                 {searchResults.length > 0 ? (
-                  <div className="p-3 space-y-3">
+                  <div className="space-y-3">
                     {searchResults.map((res, i) => (
-                      <div key={i} className="text-xs space-y-1 border-b pb-2 last:border-0">
-                        <div className="flex justify-between font-medium">
-                          <span className="text-primary font-bold">{res.card}</span>
-                          <span className="text-emerald-700 font-bold">£{res.price.toFixed(2)}</span>
+                      <div key={i} className="text-sm space-y-2 bg-card p-4 rounded-xl shadow-sm border border-black/5 transition-all hover:scale-[1.01]">
+                        <div className="flex justify-between items-center">
+                          <span className="text-primary font-black text-base">{res.card}</span>
+                          <span className="text-emerald-700 font-black bg-emerald-50 px-3 py-1 rounded-lg">£{res.price.toFixed(2)}</span>
                         </div>
-                        <div className="text-muted-foreground flex justify-between">
+                        <div className="text-xs font-bold text-muted-foreground flex justify-between uppercase tracking-widest">
                           <span>Sold by {res.sellerName}</span>
-                          <span>Recorded on {res.date}</span>
+                          <span className="opacity-60">{res.date}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-sm text-muted-foreground">No matches found in history</div>
+                  <div className="p-12 text-center text-xs font-bold text-muted-foreground/60 uppercase tracking-widest italic">
+                    No results for "{searchQuery}"
+                  </div>
                 )}
               </ScrollArea>
             )}
@@ -601,14 +681,15 @@ export default function Dashboard() {
         </Card>
 
         {/* Seller Management */}
-        <Card className="shadow-md border-none">
+        <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Seller Roster</CardTitle>
+            <CardTitle className="text-lg font-black tracking-tight">Seller Roster</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <div className="flex gap-2">
               <Input 
                 placeholder="New seller name..." 
+                className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
                 value={newSellerName}
                 onChange={(e) => setNewSellerName(e.target.value)}
                 onKeyDown={(e) => {
@@ -620,6 +701,7 @@ export default function Dashboard() {
               />
               <Button 
                 size="icon" 
+                className="h-12 w-12 rounded-xl shadow-lg"
                 onClick={() => {
                   if (newSellerName) {
                     addSeller(newSellerName);
@@ -627,22 +709,22 @@ export default function Dashboard() {
                   }
                 }}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-5 h-5" />
               </Button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2.5">
               {sellers.map((s) => (
                 <Badge 
                   key={s.id} 
                   variant="secondary" 
-                  className="pl-3 pr-1 py-1 flex items-center gap-1 group cursor-default"
+                  className="pl-4 pr-2 py-2 flex items-center gap-2 group cursor-default rounded-xl bg-card border-none shadow-sm ring-1 ring-black/5 text-sm font-bold"
                 >
                   {s.name}
                   <button 
                     onClick={() => removeSeller(s.id)}
-                    className="p-0.5 hover:bg-destructive hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 hover:bg-destructive hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </Badge>
               ))}
