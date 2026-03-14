@@ -17,7 +17,8 @@ import {
   Cloud,
   ShieldCheck,
   UserCircle,
-  Lock
+  Lock,
+  Settings2
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +45,12 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { 
@@ -668,52 +675,83 @@ export default function Dashboard() {
 
         <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-black tracking-tight">Seller Roster ({profileId})</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-black tracking-tight">Seller Roster ({profileId})</CardTitle>
+              {isManagerAuthenticated ? (
+                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tighter gap-1.5 border-primary/20 bg-primary/5 text-primary">
+                  <Settings2 className="w-3 h-3" /> Management Mode
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tighter gap-1.5 border-muted/20 bg-muted/5 text-muted-foreground">
+                  <Lock className="w-3 h-3" /> View Only
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex gap-2">
-              <Input 
-                placeholder="New seller name..." 
-                className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
-                value={newSellerName}
-                onChange={(e) => setNewSellerName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newSellerName) {
-                    addSeller(newSellerName);
-                    setNewSellerName("");
-                  }
-                }}
-              />
-              <Button 
-                size="icon" 
-                className="h-12 w-12 rounded-xl shadow-lg"
-                onClick={() => {
-                  if (newSellerName) {
-                    addSeller(newSellerName);
-                    setNewSellerName("");
-                  }
-                }}
-              >
-                <Plus className="w-5 h-5" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              {sellers.map((s) => (
-                <Badge 
-                  key={s.id} 
-                  variant="secondary" 
-                  className="pl-4 pr-2 py-2 flex items-center gap-2 group cursor-default rounded-xl bg-card border-none shadow-sm ring-1 ring-black/5 text-sm font-bold"
+            {isManagerAuthenticated && (
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="New seller name..." 
+                  className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
+                  value={newSellerName}
+                  onChange={(e) => setNewSellerName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newSellerName) {
+                      addSeller(newSellerName);
+                      setNewSellerName("");
+                    }
+                  }}
+                />
+                <Button 
+                  size="icon" 
+                  className="h-12 w-12 rounded-xl shadow-lg"
+                  onClick={() => {
+                    if (newSellerName) {
+                      addSeller(newSellerName);
+                      setNewSellerName("");
+                    }
+                  }}
                 >
-                  {s.name}
-                  <button 
-                    onClick={() => removeSeller(s.id)}
-                    className="p-1 hover:bg-destructive hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
+                  <Plus className="w-5 h-5" />
+                </Button>
+              </div>
+            )}
+            
+            <div className="flex flex-wrap gap-2.5">
+              {sellers.length > 0 ? (
+                sellers.map((s) => (
+                  <Badge 
+                    key={s.id} 
+                    variant="secondary" 
+                    className={`pl-4 ${isManagerAuthenticated ? 'pr-2' : 'pr-4'} py-2 flex items-center gap-2 group cursor-default rounded-xl bg-card border-none shadow-sm ring-1 ring-black/5 text-sm font-bold transition-all`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </Badge>
-              ))}
+                    {s.name}
+                    {isManagerAuthenticated && (
+                      <button 
+                        onClick={() => removeSeller(s.id)}
+                        className="p-1 hover:bg-destructive hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
+                        title="Delete Seller"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground italic font-medium py-4">
+                  {isManagerAuthenticated 
+                    ? "Start by adding your first seller above." 
+                    : "No sellers found in this vault roster."}
+                </p>
+              )}
             </div>
+            
+            {!isManagerAuthenticated && (
+              <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest text-center">
+                Contact a manager to add or remove sellers from the roster.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
