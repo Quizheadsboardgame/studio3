@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
+import Image from "next/image";
 import { 
   Plus, 
   Search, 
@@ -61,6 +62,7 @@ import {
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 type ProfileType = 'manager' | 'staff';
 
@@ -94,8 +96,9 @@ export default function Dashboard() {
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
 
+  const logoImage = PlaceHolderImages.find(img => img.id === 'app-logo');
+
   useEffect(() => {
-    // Avoid hydration mismatch by setting date in useEffect
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
@@ -309,17 +312,17 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <div className="bg-primary/10 p-2.5 rounded-xl">
-            <Coins className="w-8 h-8 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-primary">NewtCollect</h1>
-            <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium">
-              <Cloud className="w-4 h-4 text-emerald-600" />
-              Shared {profileId.charAt(0).toUpperCase() + profileId.slice(1)} Vault Sync
-            </div>
-          </div>
+        <div className="flex items-center">
+          {logoImage && (
+            <Image 
+              src={logoImage.imageUrl} 
+              alt={logoImage.description} 
+              width={200} 
+              height={60} 
+              className="object-contain"
+              data-ai-hint={logoImage.imageHint}
+            />
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
@@ -747,7 +750,7 @@ export default function Dashboard() {
                             })
                           ) : (
                             <TableRow>
-                              <TableCell colSpan={isManagerAuthenticated ? 5 : 3} className="h-32 text-center text-muted-foreground/60 italic">
+                              <TableCell colSpan={showComm ? 5 : 4} className="h-32 text-center text-muted-foreground/60 italic">
                                 No logs found for this seller on {selectedDate}.
                               </TableCell>
                             </TableRow>
