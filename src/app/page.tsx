@@ -49,8 +49,8 @@ export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   
-  // Persistent Profile Management
-  const [profileId, setProfileId] = useState<ProfileType>('manager');
+  // Persistent Profile Management - Defaulting to 'staff'
+  const [profileId, setProfileId] = useState<ProfileType>('staff');
   
   // Custom hook now takes profileId to partition data
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId);
