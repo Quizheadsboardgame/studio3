@@ -4,17 +4,12 @@ import { useMemo, useCallback } from "react";
 import { 
   collection, 
   doc, 
-  setDoc, 
-  deleteDoc, 
-  updateDoc, 
-  serverTimestamp 
 } from "firebase/firestore";
 import { 
   useFirestore, 
   useUser, 
   useCollection, 
   useMemoFirebase,
-  addDocumentNonBlocking,
   updateDocumentNonBlocking,
   deleteDocumentNonBlocking,
   setDocumentNonBlocking
@@ -54,12 +49,12 @@ export function useSales() {
 
   const isLoaded = !sellersLoading && !salesLoading && !!user;
 
-  // Transform sellers to simple string array for the UI
+  // Return full seller objects
   const sellers = useMemo(() => {
-    return sellersData?.map(s => s.name).sort() || [];
+    return [...(sellersData || [])].sort((a, b) => a.name.localeCompare(b.name));
   }, [sellersData]);
 
-  // Transform sales into the nested structure the UI expects: { [date]: { [sellerName]: Sale[] } }
+  // Transform sales into the nested structure the UI expects: { [date]: { [sellerId]: Sale[] } }
   const salesByDate = useMemo(() => {
     const result: Record<string, Record<string, Sale[]>> = {};
     if (!salesData) return result;
@@ -80,23 +75,23 @@ export function useSales() {
     setDocumentNonBlocking(docRef, { id: sellerId, name }, { merge: true });
   }, [sellersRef]);
 
-  const removeSeller = useCallback((name: string) => {
-    if (!name || !sellersRef) return;
-    const sellerId = name.toLowerCase().replace(/\s+/g, '-');
+  const removeSeller = useCallback((sellerId: string) => {
+    if (!sellerId || !sellersRef) return;
     const docRef = doc(sellersRef, sellerId);
     deleteDocumentNonBlocking(docRef);
   }, [sellersRef]);
 
-  const addSale = useCallback((date: string, seller: string, cardName: string, price: number) => {
+  const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
-    const saleId = crypto.randomUUID();
-    const docRef = doc(salesRef, saleId);
+    // Use doc(collection) to let Firestore generate a unique ID safely
+    const docRef = doc(salesRef);
+    const saleId = docRef.id;
     setDocumentNonBlocking(docRef, {
       id: saleId,
       cardName,
       price,
       saleDate: date,
-      sellerId: seller,
+      sellerId: sellerId,
     }, { merge: true });
   }, [salesRef]);
 

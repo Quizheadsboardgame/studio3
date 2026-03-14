@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (sellers.length > 0 && !activeTab) {
-      setActiveTab(sellers[0]);
+      setActiveTab(sellers[0].id);
     }
   }, [sellers, activeTab]);
 
@@ -74,7 +74,7 @@ export default function Dashboard() {
     let topSellerName = "-";
 
     sellers.forEach((seller) => {
-      const sellerSales = dailySalesData[seller] || [];
+      const sellerSales = dailySalesData[seller.id] || [];
       const sellerTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
       
       totalSales += sellerTotal;
@@ -82,7 +82,7 @@ export default function Dashboard() {
 
       if (sellerTotal > maxSellerTotal) {
         maxSellerTotal = sellerTotal;
-        topSellerName = seller;
+        topSellerName = seller.name;
       }
     });
 
@@ -96,61 +96,68 @@ export default function Dashboard() {
     const sellerTotals: Record<string, number> = {};
 
     Object.values(sales).forEach((daySales) => {
-      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
         const dayTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
         totalSales += dayTotal;
         totalCards += sellerSales.length;
-        sellerTotals[seller] = (sellerTotals[seller] || 0) + dayTotal;
+        sellerTotals[sellerId] = (sellerTotals[sellerId] || 0) + dayTotal;
       });
     });
 
     let topSeller = "-";
     let maxTotal = 0;
-    Object.entries(sellerTotals).forEach(([seller, total]) => {
+    Object.entries(sellerTotals).forEach(([sellerId, total]) => {
       if (total > maxTotal) {
         maxTotal = total;
-        topSeller = seller;
+        const seller = sellers.find(s => s.id === sellerId);
+        topSeller = seller ? seller.name : sellerId;
       }
     });
 
     return { totalSales, totalCards, topSeller };
-  }, [sales]);
+  }, [sales, sellers]);
 
   const recentActivity = useMemo(() => {
-    const all: { date: string; seller: string; card: string; price: number }[] = [];
+    const all: { date: string; sellerName: string; card: string; price: number }[] = [];
     Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
+        const seller = sellers.find(s => s.id === sellerId);
+        const name = seller ? seller.name : sellerId;
         sellerSales.forEach((sale) => {
-          all.push({ date, seller, card: sale.cardName, price: sale.price });
+          all.push({ date, sellerName: name, card: sale.cardName, price: sale.price });
         });
       });
     });
     return all.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-  }, [sales]);
+  }, [sales, sellers]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const results: { date: string; seller: string; card: string; price: number }[] = [];
+    const results: { date: string; sellerName: string; card: string; price: number }[] = [];
     
     Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
+        const seller = sellers.find(s => s.id === sellerId);
+        const name = seller ? seller.name : sellerId;
         sellerSales.forEach((sale) => {
           if (sale.cardName.toLowerCase().includes(searchQuery.toLowerCase())) {
-            results.push({ date, seller, card: sale.cardName, price: sale.price });
+            results.push({ date, sellerName: name, card: sale.cardName, price: sale.price });
           }
         });
       });
     });
     
     return results;
-  }, [sales, searchQuery]);
+  }, [sales, searchQuery, sellers]);
 
   const handleExportCSV = () => {
     const rows = [["Date", "Seller", "Card", "Price"]];
     Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
+        const seller = sellers.find(s => s.id === sellerId);
+        const name = seller ? seller.name : sellerId;
         sellerSales.forEach((sale) => {
-          rows.push([date, seller, sale.cardName, sale.price.toString()]);
+          rows.push([date, name, sale.cardName, sale.price.toString()]);
         });
       });
     });
@@ -168,14 +175,16 @@ export default function Dashboard() {
   const handleGenerateAiSummary = async () => {
     setIsAiLoading(true);
     try {
+      const formattedDailySales: Record<string, { card: string; price: number }[]> = {};
+      Object.entries(dailySalesData).forEach(([sellerId, sales]) => {
+        const seller = sellers.find(s => s.id === sellerId);
+        const name = seller ? seller.name : sellerId;
+        formattedDailySales[name] = sales.map(s => ({ card: s.cardName, price: s.price }));
+      });
+
       const input = {
         date: selectedDate,
-        dailySales: Object.fromEntries(
-          Object.entries(dailySalesData).map(([seller, sales]) => [
-            seller,
-            sales.map(s => ({ card: s.cardName, price: s.price }))
-          ])
-        ),
+        dailySales: formattedDailySales,
       };
       const result = await generateDailySalesSummary(input);
       setAiSummary(result.summary);
@@ -207,10 +216,10 @@ export default function Dashboard() {
     }
   };
 
-  const handleAddSale = (seller: string) => {
+  const handleAddSale = (sellerId: string) => {
     const priceNum = parseFloat(newSalePrice);
     if (newSaleCard.trim() && !isNaN(priceNum)) {
-      addSale(selectedDate, seller, newSaleCard.trim(), priceNum);
+      addSale(selectedDate, sellerId, newSaleCard.trim(), priceNum);
       setNewSaleCard("");
       setNewSalePrice("");
     }
@@ -263,8 +272,8 @@ export default function Dashboard() {
               <ScrollArea className="max-w-full">
                 <TabsList className="bg-muted/50 p-1 mb-2">
                   {sellers.map((s) => (
-                    <TabsTrigger key={s} value={s} className="px-6 data-[state=active]:bg-card">
-                      {s}
+                    <TabsTrigger key={s.id} value={s.id} className="px-6 data-[state=active]:bg-card">
+                      {s.name}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -273,7 +282,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
             {sellers.map((s) => (
-              <TabsContent key={s} value={s} className="space-y-6 mt-0 focus-visible:outline-none">
+              <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-4 rounded-lg items-end">
                   <div className="md:col-span-6 space-y-2">
                     <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Card Name</label>
@@ -281,7 +290,7 @@ export default function Dashboard() {
                       placeholder="Enter card name..." 
                       value={newSaleCard}
                       onChange={(e) => setNewSaleCard(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s.id)}
                     />
                   </div>
                   <div className="md:col-span-4 space-y-2">
@@ -292,13 +301,13 @@ export default function Dashboard() {
                       placeholder="0.00" 
                       value={newSalePrice}
                       onChange={(e) => setNewSalePrice(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s.id)}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <Button 
                       className="w-full" 
-                      onClick={() => handleAddSale(s)}
+                      onClick={() => handleAddSale(s.id)}
                       disabled={!newSaleCard.trim() || !newSalePrice}
                     >
                       <Plus className="w-4 h-4 mr-2" /> Add Entry
@@ -317,8 +326,8 @@ export default function Dashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dailySalesData[s]?.length > 0 ? (
-                        dailySalesData[s].map((sale) => {
+                      {dailySalesData[s.id]?.length > 0 ? (
+                        dailySalesData[s.id].map((sale) => {
                           const isEditing = editingSaleId === sale.id;
                           return (
                             <TableRow key={sale.id}>
@@ -411,9 +420,9 @@ export default function Dashboard() {
                 
                 <div className="flex justify-end pt-2">
                   <div className="bg-primary/5 px-6 py-3 rounded-lg border border-primary/10">
-                    <span className="text-sm text-muted-foreground mr-4">{s} Total ({selectedDate}):</span>
+                    <span className="text-sm text-muted-foreground mr-4">{s.name} Total ({selectedDate}):</span>
                     <span className="text-xl font-bold text-primary">
-                      £{(dailySalesData[s]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
+                      £{(dailySalesData[s.id]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -533,7 +542,7 @@ export default function Dashboard() {
                       <div key={i} className="flex justify-between items-center text-xs border-b pb-2 last:border-0 last:pb-0">
                         <div className="space-y-0.5">
                           <div className="font-semibold">{act.card}</div>
-                          <div className="text-muted-foreground">{act.seller} • {act.date}</div>
+                          <div className="text-muted-foreground">{act.sellerName} • {act.date}</div>
                         </div>
                         <div className="font-bold text-primary">£{act.price.toFixed(2)}</div>
                       </div>
@@ -577,7 +586,7 @@ export default function Dashboard() {
                           <span className="text-emerald-700 font-bold">£{res.price.toFixed(2)}</span>
                         </div>
                         <div className="text-muted-foreground flex justify-between">
-                          <span>Sold by {res.seller}</span>
+                          <span>Sold by {res.sellerName}</span>
                           <span>Recorded on {res.date}</span>
                         </div>
                       </div>
@@ -606,7 +615,6 @@ export default function Dashboard() {
                   if (e.key === 'Enter' && newSellerName) {
                     addSeller(newSellerName);
                     setNewSellerName("");
-                    setActiveTab(newSellerName);
                   }
                 }}
               />
@@ -616,7 +624,6 @@ export default function Dashboard() {
                   if (newSellerName) {
                     addSeller(newSellerName);
                     setNewSellerName("");
-                    setActiveTab(newSellerName);
                   }
                 }}
               >
@@ -626,13 +633,13 @@ export default function Dashboard() {
             <div className="flex flex-wrap gap-2">
               {sellers.map((s) => (
                 <Badge 
-                  key={s} 
+                  key={s.id} 
                   variant="secondary" 
                   className="pl-3 pr-1 py-1 flex items-center gap-1 group cursor-default"
                 >
-                  {s}
+                  {s.name}
                   <button 
-                    onClick={() => removeSeller(s)}
+                    onClick={() => removeSeller(s.id)}
                     className="p-0.5 hover:bg-destructive hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 className="w-3 h-3" />
