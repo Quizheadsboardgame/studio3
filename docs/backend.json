@@ -46,7 +46,7 @@
         },
         "sellerId": {
           "type": "string",
-          "description": "Reference to the Seller who made this sale. (Relationship: Seller 1:N Sale)"
+          "description": "Reference to the Seller who made this sale."
         }
       },
       "required": [
@@ -60,41 +60,23 @@
   },
   "auth": {
     "providers": [
-      "google",
-      "password",
       "anonymous"
     ]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": {
-            "$ref": "#/backend/entities/User"
-          },
-          "description": "Top-level collection acting as a container for all data belonging to a specific authenticated user.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier (UID) of the authenticated user."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/sellers/{sellerId}",
+        "path": "/profiles/{profileId}/sellers/{sellerId}",
         "definition": {
           "entityName": "Seller",
           "schema": {
             "$ref": "#/backend/entities/Seller"
           },
-          "description": "Stores individual seller profiles, each owned by a specific user.",
+          "description": "Shared seller profiles for a specific role (Manager or Staff).",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique identifier (UID) of the authenticated user."
+              "name": "profileId",
+              "description": "The ID of the profile (e.g., 'manager', 'staff')."
             },
             {
               "name": "sellerId",
@@ -104,17 +86,17 @@
         }
       },
       {
-        "path": "/users/{userId}/sales/{saleId}",
+        "path": "/profiles/{profileId}/sales/{saleId}",
         "definition": {
           "entityName": "Sale",
           "schema": {
             "$ref": "#/backend/entities/Sale"
           },
-          "description": "Records individual sales transactions, each owned by a specific user.",
+          "description": "Shared sales transactions for a specific role (Manager or Staff).",
           "params": [
             {
-              "name": "userId",
-              "description": "The unique identifier (UID) of the authenticated user."
+              "name": "profileId",
+              "description": "The ID of the profile (e.g., 'manager', 'staff')."
             },
             {
               "name": "saleId",

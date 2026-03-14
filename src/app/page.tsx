@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -15,10 +16,10 @@ import {
   History,
   Coins,
   Loader2,
-  LogIn,
-  LogOut,
   User as UserIcon,
-  Cloud
+  Cloud,
+  ShieldCheck,
+  UserCircle
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,22 +38,26 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 import { 
   useAuth, 
   useUser, 
-  initiateAnonymousSignIn, 
-  initiateGoogleSignIn, 
-  initiateSignOut 
+  initiateAnonymousSignIn
 } from "@/firebase";
+
+type ProfileType = 'manager' | 'staff';
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
-  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales();
+  
+  // Persistent Profile Management
+  const [profileId, setProfileId] = useState<ProfileType>('manager');
+  
+  // Custom hook now takes profileId to partition data
+  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId);
   
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,7 +80,7 @@ export default function Dashboard() {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
   }, []);
 
-  // Handle Authentication
+  // Ensure anonymous sign-in for Firestore rules access
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
       initiateAnonymousSignIn(auth);
@@ -191,7 +196,7 @@ export default function Dashboard() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `newtons_collectables_full_vault.csv`);
+    link.setAttribute("download", `newtons_collectables_${profileId}_vault.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -255,7 +260,7 @@ export default function Dashboard() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-muted-foreground animate-pulse">Syncing with Newt Vault...</p>
+          <p className="text-muted-foreground animate-pulse">Syncing Shared Vault...</p>
         </div>
       </div>
     );
@@ -272,12 +277,32 @@ export default function Dashboard() {
             <h1 className="text-3xl font-extrabold tracking-tight text-primary">NewtCollect</h1>
             <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium">
               <Cloud className="w-4 h-4 text-emerald-600" />
-              Real-time Vault Sync Enabled
+              Shared {profileId.charAt(0).toUpperCase() + profileId.slice(1)} Vault Sync
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+          {/* Profile Switcher */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="rounded-xl gap-2 shadow-sm border-primary/20 bg-card hover:bg-primary/5 transition-all">
+                {profileId === 'manager' ? <ShieldCheck className="w-4 h-4 text-primary" /> : <UserCircle className="w-4 h-4 text-muted-foreground" />}
+                <span className="font-bold">Profile: {profileId.charAt(0).toUpperCase() + profileId.slice(1)}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-xl">
+              <DropdownMenuLabel>Switch Profile</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setProfileId('manager')} className="gap-2 cursor-pointer">
+                <ShieldCheck className="w-4 h-4 text-primary" /> Manager Vault
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setProfileId('staff')} className="gap-2 cursor-pointer">
+                <UserCircle className="w-4 h-4 text-muted-foreground" /> Staff Vault
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <div className="flex items-center gap-2 bg-card border rounded-xl px-4 py-2 shadow-sm">
             <CalendarIcon className="w-4 h-4 text-primary" />
             <input 
@@ -287,39 +312,6 @@ export default function Dashboard() {
               onChange={(e) => setSelectedDate(e.target.value)}
             />
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                <Avatar className="h-10 w-10 border-2 border-primary/20 hover:border-primary/50 transition-colors">
-                  <AvatarImage src={user?.photoURL || ""} alt={user?.displayName || "User"} />
-                  <AvatarFallback className="bg-primary/5 text-primary font-bold">
-                    {user?.displayName?.charAt(0) || user?.email?.charAt(0) || <UserIcon className="w-5 h-5" />}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-bold leading-none">{user?.displayName || "Newton's Collector"}</p>
-                  <p className="text-xs leading-none text-muted-foreground truncate">
-                    {user?.isAnonymous ? "Guest Mode (Local Sync)" : user?.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {user?.isAnonymous ? (
-                <DropdownMenuItem onClick={() => initiateGoogleSignIn(auth!)} className="gap-2 cursor-pointer font-medium text-primary">
-                  <LogIn className="w-4 h-4" /> Sign in with Google
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={() => initiateSignOut(auth!)} className="gap-2 cursor-pointer font-medium text-destructive">
-                  <LogOut className="w-4 h-4" /> Sign Out
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
           
           <Button onClick={handleExportCSV} variant="outline" className="rounded-xl gap-2 shadow-sm">
             <Download className="w-4 h-4" /> Export
@@ -333,7 +325,7 @@ export default function Dashboard() {
           <CardHeader className="pb-0 border-b bg-muted/20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-xl">Daily Sales Logs</CardTitle>
+                <CardTitle className="text-xl">Daily Sales Logs ({profileId})</CardTitle>
                 <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
                   {selectedDate}
                 </Badge>
@@ -571,7 +563,7 @@ export default function Dashboard() {
         <div className="space-y-6">
           <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
             <div className="bg-emerald-100 p-1.5 rounded-lg"><Coins className="w-5 h-5 text-emerald-600" /></div>
-            The Vault Lifetime
+            The Shared Vault ({profileId})
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card className="border-none shadow-lg bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10">
@@ -626,7 +618,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <p className="text-center text-xs font-bold text-muted-foreground/60 py-12 uppercase tracking-widest italic">
-                    The vault is empty.
+                    The shared vault is empty.
                   </p>
                 )}
               </ScrollArea>
@@ -641,7 +633,7 @@ export default function Dashboard() {
         {/* Global Search */}
         <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-black tracking-tight">Vault Search</CardTitle>
+            <CardTitle className="text-lg font-black tracking-tight">Vault Search ({profileId})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="relative">
@@ -683,7 +675,7 @@ export default function Dashboard() {
         {/* Seller Management */}
         <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-black tracking-tight">Seller Roster</CardTitle>
+            <CardTitle className="text-lg font-black tracking-tight">Seller Roster ({profileId})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex gap-2">

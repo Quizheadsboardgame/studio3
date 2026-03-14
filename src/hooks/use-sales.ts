@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -28,20 +29,20 @@ export type Seller = {
   name: string;
 };
 
-export function useSales() {
+export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  // Memoize collection references
+  // Memoize collection references based on profileId
   const sellersRef = useMemoFirebase(() => {
-    if (!db || !user) return null;
-    return collection(db, "users", user.uid, "sellers");
-  }, [db, user]);
+    if (!db || !profileId) return null;
+    return collection(db, "profiles", profileId, "sellers");
+  }, [db, profileId]);
 
   const salesRef = useMemoFirebase(() => {
-    if (!db || !user) return null;
-    return collection(db, "users", user.uid, "sales");
-  }, [db, user]);
+    if (!db || !profileId) return null;
+    return collection(db, "profiles", profileId, "sales");
+  }, [db, profileId]);
 
   // Real-time data
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
@@ -83,7 +84,6 @@ export function useSales() {
 
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
-    // Use doc(collection) to let Firestore generate a unique ID safely
     const docRef = doc(salesRef);
     const saleId = docRef.id;
     setDocumentNonBlocking(docRef, {
