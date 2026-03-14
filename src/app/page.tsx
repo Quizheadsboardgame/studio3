@@ -16,7 +16,8 @@ import {
   Loader2,
   Cloud,
   ShieldCheck,
-  UserCircle
+  UserCircle,
+  Lock
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,14 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { 
@@ -42,16 +51,26 @@ import {
   useUser, 
   initiateAnonymousSignIn
 } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
 
 type ProfileType = 'manager' | 'staff';
+
+const MANAGER_PASSWORD = "Harley";
+const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const { toast } = useToast();
   
   // Persistent Profile Management - Defaulting to 'staff'
   const [profileId, setProfileId] = useState<ProfileType>('staff');
   
+  // Auth States
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
+
   // Custom hook now takes profileId to partition data
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId);
   
@@ -72,6 +91,12 @@ export default function Dashboard() {
   // Handle Hydration Mismatch for Date
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
+    
+    // Check for existing Manager session
+    const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
+    if (expiry && parseInt(expiry) > new Date().getTime()) {
+      setIsManagerAuthenticated(true);
+    }
   }, []);
 
   // Ensure anonymous sign-in for Firestore rules access
@@ -90,7 +115,7 @@ export default function Dashboard() {
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
 
-  // Daily Stats
+  // Stats Calculations
   const dailyStats = useMemo(() => {
     let totalSales = 0;
     let totalCards = 0;
@@ -113,7 +138,6 @@ export default function Dashboard() {
     return { totalSales, totalCards, topSellerName };
   }, [sellers, dailySalesData]);
 
-  // All-Time Stats
   const allTimeStats = useMemo(() => {
     let totalSales = 0;
     let totalCards = 0;
@@ -173,6 +197,36 @@ export default function Dashboard() {
     
     return results;
   }, [sales, searchQuery, sellers]);
+
+  // Handlers
+  const handleProfileSwitch = (newProfile: ProfileType) => {
+    if (newProfile === 'manager' && !isManagerAuthenticated) {
+      setIsPasswordDialogOpen(true);
+      return;
+    }
+    setProfileId(newProfile);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (passwordInput === MANAGER_PASSWORD) {
+      const expiryTime = new Date().getTime() + 24 * 60 * 60 * 1000;
+      localStorage.setItem(AUTH_EXPIRY_KEY, expiryTime.toString());
+      setIsManagerAuthenticated(true);
+      setProfileId('manager');
+      setIsPasswordDialogOpen(false);
+      setPasswordInput("");
+      toast({
+        title: "Authenticated",
+        description: "Manager session active for 24 hours.",
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Access Denied",
+        description: "Incorrect password for Manager Vault.",
+      });
+    }
+  };
 
   const handleExportCSV = () => {
     const rows = [["Date", "Seller", "Card", "Price"]];
@@ -265,10 +319,10 @@ export default function Dashboard() {
             <DropdownMenuContent align="end" className="w-48 rounded-xl">
               <DropdownMenuLabel>Switch Profile</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setProfileId('manager')} className="gap-2 cursor-pointer">
+              <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-2 cursor-pointer">
                 <ShieldCheck className="w-4 h-4 text-primary" /> Manager Vault
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setProfileId('staff')} className="gap-2 cursor-pointer">
+              <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-2 cursor-pointer">
                 <UserCircle className="w-4 h-4 text-muted-foreground" /> Staff Vault
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -468,7 +522,6 @@ export default function Dashboard() {
 
       {/* Analytics Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Daily Stats Section */}
         <div className="space-y-6">
           <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
             <div className="bg-primary/10 p-1.5 rounded-lg"><CalendarIcon className="w-5 h-5 text-primary" /></div>
@@ -502,7 +555,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* All-Time Vault Section */}
         <div className="space-y-6">
           <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
             <div className="bg-emerald-100 p-1.5 rounded-lg"><Coins className="w-5 h-5 text-emerald-600" /></div>
@@ -573,7 +625,6 @@ export default function Dashboard() {
       <Separator className="bg-black/5 h-[1px]" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Global Search */}
         <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-black tracking-tight">Vault Search ({profileId})</CardTitle>
@@ -615,7 +666,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Seller Management */}
         <Card className="shadow-xl border-none rounded-2xl ring-1 ring-black/5">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-black tracking-tight">Seller Roster ({profileId})</CardTitle>
@@ -667,6 +717,36 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Password Dialog */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-primary" />
+              Manager Authentication
+            </DialogTitle>
+            <DialogDescription>
+              Please enter the password to access the Manager Vault.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="password"
+              placeholder="Enter password..."
+              className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button onClick={handlePasswordSubmit} className="rounded-xl shadow-lg shadow-primary/20">Access Vault</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
