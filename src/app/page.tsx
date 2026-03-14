@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -110,9 +111,11 @@ export default function Dashboard() {
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     
+    // Check for existing manager session on mount
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
+      setProfileId('manager'); // Automatically switch to manager profile if authenticated
     }
   }, []);
 
@@ -433,7 +436,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className={`grid grid-cols-1 ${isManagerAuthenticated ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-4 animate-in slide-in-from-bottom-4 duration-700`}>
+      <div className={`grid grid-cols-1 ${profileId === 'manager' ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-4 animate-in slide-in-from-bottom-4 duration-700`}>
         <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
           <CardHeader className="p-5 pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
@@ -445,7 +448,7 @@ export default function Dashboard() {
             <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Aggregated across {dailyStats.totalCards} cards</p>
           </CardContent>
         </Card>
-        {isManagerAuthenticated && (
+        {profileId === 'manager' && (
           <Card className="border-none shadow-lg bg-emerald-50 rounded-2xl ring-1 ring-emerald-500/10 group hover:ring-emerald-500/30 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
@@ -468,7 +471,7 @@ export default function Dashboard() {
             <div className="text-3xl font-black">{dailyStats.totalCards} <span className="text-lg text-muted-foreground font-bold">Log entries</span></div>
           </CardContent>
         </Card>
-        {isManagerAuthenticated && (
+        {profileId === 'manager' && (
           <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
@@ -483,7 +486,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {isManagerAuthenticated && (
+      {profileId === 'manager' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-1000">
           <Card className="lg:col-span-2 shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card">
             <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/10">

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -139,9 +140,8 @@ export function useSales(profileId: string) {
   }, [salesRef, sellers]);
 
   const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>, origin?: string) => {
-    const targetRef = origin === 'staff' && profileId === 'manager' && staffSalesRef 
-      ? staffSalesRef 
-      : salesRef;
+    // If the sale originated from staff and we are manager, use staff ref
+    const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
 
     if (!targetRef || !saleId) return;
 
@@ -157,17 +157,15 @@ export function useSales(profileId: string) {
 
     const docRef = doc(targetRef, saleId);
     updateDocumentNonBlocking(docRef, updatedFields);
-  }, [salesRef, staffSalesRef, profileId, sellers, combinedSalesData]);
+  }, [salesRef, staffSalesRef, sellers, combinedSalesData]);
 
   const deleteSale = useCallback((saleId: string, origin?: string) => {
-    const targetRef = origin === 'staff' && profileId === 'manager' && staffSalesRef 
-      ? staffSalesRef 
-      : salesRef;
+    const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
 
     if (!targetRef || !saleId) return;
     const docRef = doc(targetRef, saleId);
     deleteDocumentNonBlocking(docRef);
-  }, [salesRef, staffSalesRef, profileId]);
+  }, [salesRef, staffSalesRef]);
 
   return {
     sellers,
