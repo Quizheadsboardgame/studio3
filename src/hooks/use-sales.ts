@@ -33,16 +33,17 @@ export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  // Memoize collection references based on profileId
+  // Memoize collection references based on profileId AND user presence
+  // This prevents the "Missing permissions" error by delaying the fetch until signed in.
   const sellersRef = useMemoFirebase(() => {
-    if (!db || !profileId) return null;
+    if (!db || !profileId || !user) return null;
     return collection(db, "profiles", profileId, "sellers");
-  }, [db, profileId]);
+  }, [db, profileId, user]);
 
   const salesRef = useMemoFirebase(() => {
-    if (!db || !profileId) return null;
+    if (!db || !profileId || !user) return null;
     return collection(db, "profiles", profileId, "sales");
-  }, [db, profileId]);
+  }, [db, profileId, user]);
 
   // Real-time data
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);

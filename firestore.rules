@@ -14,16 +14,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isValidProfile(profileId) {
+      return profileId == 'manager' || profileId == 'staff';
+    }
+
+    // Rules for the profile document itself
     match /profiles/{profileId} {
-      allow read, write: if isSignedIn() && (profileId == 'manager' || profileId == 'staff');
+      allow read, write: if isSignedIn() && isValidProfile(profileId);
+    }
 
-      match /sellers/{sellerId} {
-        allow read, write: if isSignedIn();
-      }
+    // Rules for sellers sub-collection
+    match /profiles/{profileId}/sellers/{sellerId} {
+      allow read, write: if isSignedIn() && isValidProfile(profileId);
+    }
 
-      match /sales/{saleId} {
-        allow read, write: if isSignedIn();
-      }
+    // Rules for sales sub-collection
+    match /profiles/{profileId}/sales/{saleId} {
+      allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
 
     match /{path=**} {
