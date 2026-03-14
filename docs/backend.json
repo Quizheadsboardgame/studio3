@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "Seller": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Seller",
+      "type": "object",
+      "description": "Represents an individual seller of collectible cards.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Seller entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the seller."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Sale": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Sale",
+      "type": "object",
+      "description": "Records an individual transaction for a collectible card.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Sale entity."
+        },
+        "cardName": {
+          "type": "string",
+          "description": "The name of the collectible card sold."
+        },
+        "price": {
+          "type": "number",
+          "description": "The sale price of the card, in the local currency (e.g., GBP)."
+        },
+        "saleDate": {
+          "type": "string",
+          "description": "The date when the sale was recorded, in YYYY-MM-DD format.",
+          "format": "date"
+        },
+        "sellerId": {
+          "type": "string",
+          "description": "Reference to the Seller who made this sale. (Relationship: Seller 1:N Sale)"
+        }
+      },
+      "required": [
+        "id",
+        "cardName",
+        "price",
+        "saleDate",
+        "sellerId"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Top-level collection acting as a container for all data belonging to a specific authenticated user. This document primarily serves to scope user-specific subcollections and enables path-based authorization. While no explicit 'User' schema was provided, it is implicitly a container for user-owned data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier (UID) of the authenticated user, corresponding to `request.auth.uid`."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/sellers/{sellerId}",
+        "definition": {
+          "entityName": "Seller",
+          "schema": {
+            "$ref": "#/backend/entities/Seller"
+          },
+          "description": "Stores individual seller profiles, each owned by a specific user. Authorization is path-based; only the `userId` specified in the path can access or modify their associated seller documents. This structure achieves authorization independence as no `get()` calls are needed in rules.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier (UID) of the authenticated user who owns this seller profile."
+            },
+            {
+              "name": "sellerId",
+              "description": "The unique identifier for a specific Seller entity."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/sales/{saleId}",
+        "definition": {
+          "entityName": "Sale",
+          "schema": {
+            "$ref": "#/backend/entities/Sale"
+          },
+          "description": "Records individual sales transactions, each owned by a specific user. Each sale document includes `sellerId` which references a seller within the same user's scope. Authorization is path-based; only the `userId` in the path can access or modify their sales, ensuring authorization independence. This collection supports secure list operations for the owning user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier (UID) of the authenticated user who owns this sale record."
+            },
+            {
+              "name": "saleId",
+              "description": "The unique identifier for a specific Sale transaction."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The recommended Firestore structure for 'NewtCollect Analytics' prioritizes secure, scalable, and debuggable access to user-specific sales and seller data. All data is strictly scoped under a top-level `/users/{userId}` collection, making each user's data entirely private and owned by them. This design adheres to **Authorization Independence** by encoding ownership directly into the document path. For example, a `Seller` document is stored at `/users/{userId}/sellers/{sellerId}` and a `Sale` document at `/users/{userId}/sales/{saleId}`. This path-based ownership means that any security rule can simply check `request.auth.uid == userId` to determine access rights, completely eliminating the need for `get()` calls to parent documents in security rules. This also enables atomic creation and updates of related documents without complex authorization dependencies.\n\nThis structure directly supports **Querying for Authorization Purposes (QAPs)**. When a client lists sellers or sales (e.g., `db.collection('users').doc(request.auth.uid).collection('sales')`), Firestore's security rules will automatically constrain the query to only the authenticated user's data, as `userId` will always match `request.auth.uid`. This ensures that `list` operations are inherently secure and do not act as data filters on the client side. The separation of `sellers` and `sales` into distinct subcollections under the user's path also ensures **Structural Segregation**, meaning all documents within a given collection (`/users/{userId}/sellers` or `/users/{userId}/sales`) share the same security posture – full ownership by `userId`.\n\nThe `sellerId` field within the `Sale` entity is maintained as a data reference, linking a sale to a specific seller *within the same user's data scope*. No additional denormalization for authorization is required for `sellerId`, as the overarching `userId` in the path already provides the necessary authorization context. This design ensures that the application's data 'remembers' all data across different sessions and devices by leveraging Firestore's cloud-based persistence, replacing the less robust `localStorage` approach."
+  }
+}

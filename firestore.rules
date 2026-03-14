@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * CORE PHILOSOPHY:
+     * This ruleset enforces a strict user-ownership model for 'NewtCollect Analytics'. 
+     * All data is structurally segregated and hierarchically nested under a top-level 
+     * /users/{userId} collection. This design employs 'Authorization Independence,' 
+     * where the user's identity is encoded directly into the document path, 
+     * allowing for performant and secure access checks without the need for 
+     * expensive cross-document lookups (get() calls).
+     *
+     * DATA STRUCTURE:
+     * - /users/{userId}: The root container for a user's account.
+     * - /users/{userId}/sellers/{sellerId}: Seller profiles specific to the user.
+     * - /users/{userId}/sales/{saleId}: Transaction records specific to the user.
+     *
+     * KEY DECISIONS:
+     * - Path-Based Authorization: The {userId} segment of the path is compared 
+     *   directly against the authenticated user's UID (request.auth.uid).
+     * - Relational Integrity: On document creation, the rules enforce that the 
+     *   internal 'id' field matches the document's path ID.
+     * - Immuntability: Critical identifier fields are marked immutable during updates.
+     * - Prototyping Mode: Rules prioritize flexible data shapes while maintaining 
+     *   strict authorization boundaries.
+     */
+
+    // --- Helper Functions ---
+
+    /**
+     * @description Checks if the user is authenticated with a valid UID.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Verifies ownership and ensures the document exists for state-changing operations.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the top-level User document.
+     * @path /users/{userId}
+     * @allow (create) if request.auth.uid is 'user_123' and path is /users/user_123.
+     * @deny (list) if a user tries to list all documents in the /users collection.
+     * @principle Restricts access to a user's own data tree using path-based ownership.
+     */
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && (request.resource.data.id == userId);
+      allow update: if isExistingOwner(userId) && (request.resource.data.id == resource.data.id);
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for Seller profiles owned by the user.
+       * @path /users/{userId}/sellers/{sellerId}
+       * @allow (get) by the owning user to view their seller details.
+       * @deny (create) if the internal 'id' does not match the 'sellerId' in the path.
+       * @principle Ensures data consistency and strict owner-only write access.
+       */
+      match /sellers/{sellerId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && (request.resource.data.id == sellerId);
+        allow update: if isExistingOwner(userId) && (request.resource.data.id == resource.data.id);
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for Sale transactions recorded by the user.
+       * @path /users/{userId}/sales/{saleId}
+       * @allow (list) by the owner to populate their dashboard.
+       * @deny (update) if a user attempts to change the 'id' of an existing sale.
+       * @principle Enforces relational integrity and protects private transaction data.
+       */
+      match /sales/{saleId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && (request.resource.data.id == saleId);
+        allow update: if isExistingOwner(userId) && (request.resource.data.id == resource.data.id);
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    // --- Global Deny ---
+    // Explicitly deny any access to paths not defined above.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
