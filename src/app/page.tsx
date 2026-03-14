@@ -289,6 +289,8 @@ export default function Dashboard() {
     );
   }
 
+  const showComm = isManagerAuthenticated;
+
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -364,7 +366,6 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
             {sellers.map((s) => {
-              const showComm = isManagerAuthenticated;
               const sellerDailySales = dailySalesData[s.id] || [];
               const sellerDailyTotal = sellerDailySales.reduce((acc, curr) => acc + curr.price, 0);
               const sellerDailyComm = sellerDailySales.reduce((acc, curr) => acc + (curr.commission || 0), 0);
@@ -372,37 +373,39 @@ export default function Dashboard() {
 
               return (
                 <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-5 rounded-2xl items-end ring-1 ring-black/5 shadow-inner">
-                    <div className="md:col-span-6 space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Card Name</label>
-                      <Input 
-                        placeholder="Enter card name..." 
-                        className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
-                        value={newSaleCard}
-                        onChange={(e) => setNewSaleCard(e.target.value)}
-                      />
+                  {profileId === 'staff' && (
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-5 rounded-2xl items-end ring-1 ring-black/5 shadow-inner">
+                      <div className="md:col-span-6 space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Card Name</label>
+                        <Input 
+                          placeholder="Enter card name..." 
+                          className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
+                          value={newSaleCard}
+                          onChange={(e) => setNewSaleCard(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-4 space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Sale Price (£)</label>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="0.00" 
+                          className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
+                          value={newSalePrice}
+                          onChange={(e) => setNewSalePrice(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Button 
+                          className="w-full shadow-lg shadow-primary/20 h-10 rounded-xl" 
+                          onClick={() => handleAddSale(s.id)}
+                          disabled={!newSaleCard.trim() || !newSalePrice}
+                        >
+                          <Plus className="w-4 h-4 mr-2" /> Add Log
+                        </Button>
+                      </div>
                     </div>
-                    <div className="md:col-span-4 space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80">Sale Price (£)</label>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00" 
-                        className="bg-card shadow-sm border-none focus-visible:ring-primary/30"
-                        value={newSalePrice}
-                        onChange={(e) => setNewSalePrice(e.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Button 
-                        className="w-full shadow-lg shadow-primary/20 h-10 rounded-xl" 
-                        onClick={() => handleAddSale(s.id)}
-                        disabled={!newSaleCard.trim() || !newSalePrice}
-                      >
-                        <Plus className="w-4 h-4 mr-2" /> Add Log
-                      </Button>
-                    </div>
-                  </div>
+                  )}
 
                   <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
                     <Table>
@@ -500,7 +503,7 @@ export default function Dashboard() {
                           })
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={isManagerAuthenticated ? (showComm ? 5 : 4) : (showComm ? 4 : 3)} className="h-32 text-center text-muted-foreground/60 italic">
+                            <TableCell colSpan={isManagerAuthenticated ? 5 : 3} className="h-32 text-center text-muted-foreground/60 italic">
                               No logs found for this seller on {selectedDate}.
                             </TableCell>
                           </TableRow>
