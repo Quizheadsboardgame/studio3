@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -8,7 +7,6 @@ import {
   Search, 
   Download, 
   Trash2, 
-  BrainCircuit, 
   Calendar as CalendarIcon,
   Pencil,
   Check,
@@ -16,7 +14,6 @@ import {
   History,
   Coins,
   Loader2,
-  User as UserIcon,
   Cloud,
   ShieldCheck,
   UserCircle
@@ -40,7 +37,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { useSales, Sale } from "@/hooks/use-sales";
-import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 import { 
   useAuth, 
   useUser, 
@@ -63,8 +59,6 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
   const [activeTab, setActiveTab] = useState("");
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // New sale form state
   const [newSaleCard, setNewSaleCard] = useState("");
@@ -200,29 +194,6 @@ export default function Dashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const handleGenerateAiSummary = async () => {
-    setIsAiLoading(true);
-    try {
-      const formattedDailySales: Record<string, { card: string; price: number }[]> = {};
-      Object.entries(dailySalesData).forEach(([sellerId, sales]) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        const name = seller ? seller.name : sellerId;
-        formattedDailySales[name] = sales.map(s => ({ card: s.cardName, price: s.price }));
-      });
-
-      const input = {
-        date: selectedDate,
-        dailySales: formattedDailySales,
-      };
-      const result = await generateDailySalesSummary(input);
-      setAiSummary(result.summary);
-    } catch (error) {
-      console.error("AI Error:", error);
-    } finally {
-      setIsAiLoading(false);
-    }
   };
 
   const startEditing = (sale: Sale) => {
@@ -529,34 +500,6 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
-
-          <Card className="shadow-2xl border-none bg-gradient-to-br from-primary/5 to-accent/10 rounded-2xl ring-1 ring-black/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <BrainCircuit className="w-5 h-5 text-primary" /> AI Market Analyzer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {aiSummary ? (
-                <ScrollArea className="h-[140px] rounded-xl border-none p-5 bg-card/80 shadow-inner">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium text-foreground/80">{aiSummary}</p>
-                </ScrollArea>
-              ) : (
-                <div className="h-[140px] flex items-center justify-center border-2 border-dashed border-primary/20 rounded-2xl bg-white/30">
-                  <p className="text-xs font-bold text-muted-foreground/60 text-center px-12 uppercase tracking-widest">
-                    Run analyzer for {selectedDate}
-                  </p>
-                </div>
-              )}
-              <Button 
-                className="w-full bg-primary hover:bg-primary/90 text-white font-bold h-12 rounded-xl shadow-xl shadow-primary/30" 
-                onClick={handleGenerateAiSummary}
-                disabled={isAiLoading || dailyStats.totalSales === 0}
-              >
-                {isAiLoading ? "Analyzing Vault Data..." : "Generate AI Insights"}
-              </Button>
-            </CardContent>
-          </Card>
         </div>
 
         {/* All-Time Vault Section */}
