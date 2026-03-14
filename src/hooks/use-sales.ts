@@ -1,133 +1,120 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo, useCallback } from "react";
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  updateDoc, 
+  serverTimestamp 
+} from "firebase/firestore";
+import { 
+  useFirestore, 
+  useUser, 
+  useCollection, 
+  useMemoFirebase,
+  addDocumentNonBlocking,
+  updateDocumentNonBlocking,
+  deleteDocumentNonBlocking,
+  setDocumentNonBlocking
+} from "@/firebase";
 
 export type Sale = {
-  card: string;
+  id?: string;
+  cardName: string;
   price: number;
+  saleDate: string;
+  sellerId: string;
 };
 
-export type SalesData = {
-  [date: string]: {
-    [seller: string]: Sale[];
-  };
+export type Seller = {
+  id: string;
+  name: string;
 };
-
-const DEFAULT_SELLERS = ["Kerion", "Connor S", "Connor W", "Nick", "Roy", "Mitch", "NC"];
 
 export function useSales() {
-  const [sellers, setSellers] = useState<string[]>([]);
-  const [sales, setSales] = useState<SalesData>({});
-  const [isLoaded, setIsLoaded] = useState(false);
+  const { user } = useUser();
+  const db = useFirestore();
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const storedSellers = localStorage.getItem("nc_sellers");
-    const storedSales = localStorage.getItem("nc_sales");
+  // Memoize collection references
+  const sellersRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "users", user.uid, "sellers");
+  }, [db, user]);
 
-    if (storedSellers) {
-      try {
-        setSellers(JSON.parse(storedSellers));
-      } catch (e) {
-        setSellers(DEFAULT_SELLERS);
-      }
-    } else {
-      setSellers(DEFAULT_SELLERS);
-    }
+  const salesRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "users", user.uid, "sales");
+  }, [db, user]);
 
-    if (storedSales) {
-      try {
-        setSales(JSON.parse(storedSales));
-      } catch (e) {
-        setSales({});
-      }
-    }
-    
-    setIsLoaded(true);
-  }, []);
+  // Real-time data
+  const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
+  const { data: salesData, isLoading: salesLoading } = useCollection<Sale>(salesRef);
 
-  // Save to localStorage when state changes
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("nc_sellers", JSON.stringify(sellers));
-    }
-  }, [sellers, isLoaded]);
+  const isLoaded = !sellersLoading && !salesLoading && !!user;
 
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("nc_sales", JSON.stringify(sales));
-    }
-  }, [sales, isLoaded]);
+  // Transform sellers to simple string array for the UI
+  const sellers = useMemo(() => {
+    return sellersData?.map(s => s.name).sort() || [];
+  }, [sellersData]);
+
+  // Transform sales into the nested structure the UI expects: { [date]: { [sellerName]: Sale[] } }
+  const salesByDate = useMemo(() => {
+    const result: Record<string, Record<string, Sale[]>> = {};
+    if (!salesData) return result;
+
+    salesData.forEach((sale) => {
+      if (!result[sale.saleDate]) result[sale.saleDate] = {};
+      if (!result[sale.saleDate][sale.sellerId]) result[sale.saleDate][sale.sellerId] = [];
+      result[sale.saleDate][sale.sellerId].push(sale);
+    });
+
+    return result;
+  }, [salesData]);
 
   const addSeller = useCallback((name: string) => {
-    if (!name) return;
-    setSellers((prev) => {
-      if (prev.includes(name)) return prev;
-      return [...prev, name];
-    });
-  }, []);
+    if (!name || !sellersRef) return;
+    const sellerId = name.toLowerCase().replace(/\s+/g, '-');
+    const docRef = doc(sellersRef, sellerId);
+    setDocumentNonBlocking(docRef, { id: sellerId, name }, { merge: true });
+  }, [sellersRef]);
 
   const removeSeller = useCallback((name: string) => {
-    setSellers((prev) => prev.filter((s) => s !== name));
-  }, []);
+    if (!name || !sellersRef) return;
+    const sellerId = name.toLowerCase().replace(/\s+/g, '-');
+    const docRef = doc(sellersRef, sellerId);
+    deleteDocumentNonBlocking(docRef);
+  }, [sellersRef]);
 
-  const addSale = useCallback((date: string, seller: string, card: string, price: number) => {
-    setSales((prev) => {
-      const currentDay = prev[date] || {};
-      const currentSellerSales = currentDay[seller] || [];
-      
-      return {
-        ...prev,
-        [date]: {
-          ...currentDay,
-          [seller]: [...currentSellerSales, { card, price }]
-        }
-      };
-    });
-  }, []);
+  const addSale = useCallback((date: string, seller: string, cardName: string, price: number) => {
+    if (!salesRef) return;
+    const saleId = crypto.randomUUID();
+    const docRef = doc(salesRef, saleId);
+    setDocumentNonBlocking(docRef, {
+      id: saleId,
+      cardName,
+      price,
+      saleDate: date,
+      sellerId: seller,
+    }, { merge: true });
+  }, [salesRef]);
 
-  const updateSale = useCallback((date: string, seller: string, index: number, updatedSale: Sale) => {
-    setSales((prev) => {
-      const currentDay = prev[date];
-      if (!currentDay) return prev;
-      
-      const currentSellerSales = currentDay[seller];
-      if (!currentSellerSales) return prev;
+  const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>) => {
+    if (!salesRef || !saleId) return;
+    const docRef = doc(salesRef, saleId);
+    updateDocumentNonBlocking(docRef, updatedFields);
+  }, [salesRef]);
 
-      const newSellerSales = [...currentSellerSales];
-      newSellerSales[index] = updatedSale;
-
-      return {
-        ...prev,
-        [date]: {
-          ...currentDay,
-          [seller]: newSellerSales
-        }
-      };
-    });
-  }, []);
-
-  const deleteSale = useCallback((date: string, seller: string, index: number) => {
-    setSales((prev) => {
-      const currentDay = prev[date];
-      if (!currentDay) return prev;
-      
-      const currentSellerSales = currentDay[seller];
-      if (!currentSellerSales) return prev;
-
-      return {
-        ...prev,
-        [date]: {
-          ...currentDay,
-          [seller]: currentSellerSales.filter((_, i) => i !== index)
-        }
-      };
-    });
-  }, []);
+  const deleteSale = useCallback((saleId: string) => {
+    if (!salesRef || !saleId) return;
+    const docRef = doc(salesRef, saleId);
+    deleteDocumentNonBlocking(docRef);
+  }, [salesRef]);
 
   return {
     sellers,
-    sales,
+    sales: salesByDate,
     isLoaded,
     addSeller,
     removeSeller,

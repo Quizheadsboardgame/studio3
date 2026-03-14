@@ -1,14 +1,11 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { 
   Plus, 
   Search, 
   Download, 
-  TrendingUp, 
-  Users, 
-  CreditCard, 
   Trash2, 
   BrainCircuit, 
   Calendar as CalendarIcon,
@@ -16,10 +13,11 @@ import {
   Check,
   X,
   History,
-  Coins
+  Coins,
+  Loader2
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,8 +28,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
+import { useAuth, useUser, initiateAnonymousSignIn } from "@/firebase";
 
 export default function Dashboard() {
+  const { user, isUserLoading } = useUser();
+  const auth = useAuth();
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales();
   
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
@@ -46,9 +47,16 @@ export default function Dashboard() {
   const [newSalePrice, setNewSalePrice] = useState("");
 
   // Editing state
-  const [editingIndex, setEditingIndex] = useState<{ seller: string; index: number } | null>(null);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
+
+  // Handle Authentication
+  useEffect(() => {
+    if (!isUserLoading && !user && auth) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [user, isUserLoading, auth]);
 
   useEffect(() => {
     if (sellers.length > 0 && !activeTab) {
@@ -113,11 +121,10 @@ export default function Dashboard() {
     Object.entries(sales).forEach(([date, daySales]) => {
       Object.entries(daySales).forEach(([seller, sellerSales]) => {
         sellerSales.forEach((sale) => {
-          all.push({ date, seller, card: sale.card, price: sale.price });
+          all.push({ date, seller, card: sale.cardName, price: sale.price });
         });
       });
     });
-    // Sort by date descending
     return all.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
   }, [sales]);
 
@@ -128,8 +135,8 @@ export default function Dashboard() {
     Object.entries(sales).forEach(([date, daySales]) => {
       Object.entries(daySales).forEach(([seller, sellerSales]) => {
         sellerSales.forEach((sale) => {
-          if (sale.card.toLowerCase().includes(searchQuery.toLowerCase())) {
-            results.push({ date, seller, card: sale.card, price: sale.price });
+          if (sale.cardName.toLowerCase().includes(searchQuery.toLowerCase())) {
+            results.push({ date, seller, card: sale.cardName, price: sale.price });
           }
         });
       });
@@ -143,7 +150,7 @@ export default function Dashboard() {
     Object.entries(sales).forEach(([date, daySales]) => {
       Object.entries(daySales).forEach(([seller, sellerSales]) => {
         sellerSales.forEach((sale) => {
-          rows.push([date, seller, sale.card, sale.price.toString()]);
+          rows.push([date, seller, sale.cardName, sale.price.toString()]);
         });
       });
     });
@@ -163,7 +170,12 @@ export default function Dashboard() {
     try {
       const input = {
         date: selectedDate,
-        dailySales: dailySalesData,
+        dailySales: Object.fromEntries(
+          Object.entries(dailySalesData).map(([seller, sales]) => [
+            seller,
+            sales.map(s => ({ card: s.cardName, price: s.price }))
+          ])
+        ),
       };
       const result = await generateDailySalesSummary(input);
       setAiSummary(result.summary);
@@ -174,22 +186,23 @@ export default function Dashboard() {
     }
   };
 
-  const startEditing = (seller: string, index: number, sale: Sale) => {
-    setEditingIndex({ seller, index });
-    setEditCard(sale.card);
+  const startEditing = (sale: Sale) => {
+    if (!sale.id) return;
+    setEditingSaleId(sale.id);
+    setEditCard(sale.cardName);
     setEditPrice(sale.price.toString());
   };
 
   const cancelEditing = () => {
-    setEditingIndex(null);
+    setEditingSaleId(null);
     setEditCard("");
     setEditPrice("");
   };
 
-  const handleUpdateSale = (seller: string, index: number) => {
+  const handleUpdateSale = (saleId: string) => {
     const priceNum = parseFloat(editPrice);
     if (editCard.trim() && !isNaN(priceNum)) {
-      updateSale(selectedDate, seller, index, { card: editCard.trim(), price: priceNum });
+      updateSale(saleId, { cardName: editCard.trim(), price: priceNum });
       cancelEditing();
     }
   };
@@ -203,14 +216,23 @@ export default function Dashboard() {
     }
   };
 
-  if (!isLoaded) return null;
+  if (!isLoaded || isUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">Syncing with Newt Vault...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">NewtCollect Analytics</h1>
-          <p className="text-muted-foreground">Professional Vault & Sales Management</p>
+          <p className="text-muted-foreground">Professional Vault & Sales Management (Synced)</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -296,10 +318,10 @@ export default function Dashboard() {
                     </TableHeader>
                     <TableBody>
                       {dailySalesData[s]?.length > 0 ? (
-                        dailySalesData[s].map((sale, i) => {
-                          const isEditing = editingIndex?.seller === s && editingIndex?.index === i;
+                        dailySalesData[s].map((sale) => {
+                          const isEditing = editingSaleId === sale.id;
                           return (
-                            <TableRow key={i}>
+                            <TableRow key={sale.id}>
                               <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
                               <TableCell>
                                 {isEditing ? (
@@ -307,11 +329,11 @@ export default function Dashboard() {
                                     className="h-8 py-0" 
                                     value={editCard} 
                                     onChange={(e) => setEditCard(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(s, i)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(sale.id!)}
                                     autoFocus
                                   />
                                 ) : (
-                                  <span className="font-medium">{sale.card}</span>
+                                  <span className="font-medium">{sale.cardName}</span>
                                 )}
                               </TableCell>
                               <TableCell className="text-right">
@@ -323,7 +345,7 @@ export default function Dashboard() {
                                       step="0.01" 
                                       value={editPrice} 
                                       onChange={(e) => setEditPrice(e.target.value)} 
-                                      onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(s, i)}
+                                      onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(sale.id!)}
                                     />
                                   </div>
                                 ) : (
@@ -338,7 +360,7 @@ export default function Dashboard() {
                                         variant="ghost" 
                                         size="icon" 
                                         className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
-                                        onClick={() => handleUpdateSale(s, i)}
+                                        onClick={() => handleUpdateSale(sale.id!)}
                                       >
                                         <Check className="w-4 h-4" />
                                       </Button>
@@ -357,7 +379,7 @@ export default function Dashboard() {
                                         variant="ghost" 
                                         size="icon" 
                                         className="h-8 w-8 text-primary hover:bg-primary/10"
-                                        onClick={() => startEditing(s, i, sale)}
+                                        onClick={() => startEditing(sale)}
                                       >
                                         <Pencil className="w-4 h-4" />
                                       </Button>
@@ -365,7 +387,7 @@ export default function Dashboard() {
                                         variant="ghost" 
                                         size="icon" 
                                         className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                        onClick={() => deleteSale(selectedDate, s, i)}
+                                        onClick={() => deleteSale(sale.id!)}
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </Button>
