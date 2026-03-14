@@ -17,7 +17,7 @@
         },
         "defaultCommission": {
           "type": "number",
-          "description": "The default commission amount (in GBP) the manager earns per sale from this seller."
+          "description": "The default commission percentage (%) the manager earns per sale from this seller."
         }
       },
       "required": [
@@ -45,7 +45,7 @@
         },
         "commission": {
           "type": "number",
-          "description": "The commission amount designated for the manager from this sale."
+          "description": "The commission amount (calculated from percentage) designated for the manager from this sale."
         },
         "saleDate": {
           "type": "string",

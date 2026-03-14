@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -736,7 +737,7 @@ export default function Dashboard() {
                   <Input 
                     type="number"
                     step="0.01"
-                    placeholder="Commission (£)..." 
+                    placeholder="Commission (%)..." 
                     className="h-12 bg-muted/20 border-none rounded-xl focus-visible:ring-primary/30"
                     value={newSellerCommission}
                     onChange={(e) => setNewSellerCommission(e.target.value)}
@@ -768,7 +769,7 @@ export default function Dashboard() {
                     <div className="flex flex-col items-start gap-0.5">
                       <span>{s.name}</span>
                       {isManagerAuthenticated && (
-                        <span className="text-[10px] text-emerald-600">£{(s.defaultCommission || 0).toFixed(2)} comm/sale</span>
+                        <span className="text-[10px] text-emerald-600">{(s.defaultCommission || 0)}% comm</span>
                       )}
                     </div>
                     {isManagerAuthenticated && (

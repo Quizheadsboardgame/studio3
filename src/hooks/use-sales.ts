@@ -120,9 +120,12 @@ export function useSales(profileId: string) {
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
     
-    // Find the seller to get their default commission
+    // Find the seller to get their default commission percentage
     const seller = sellers.find(s => s.id === sellerId);
-    const commission = seller?.defaultCommission || 0;
+    const commissionPercentage = seller?.defaultCommission || 0;
+    
+    // Calculate commission amount
+    const commissionAmount = (price * commissionPercentage) / 100;
 
     const docRef = doc(salesRef);
     const saleId = docRef.id;
@@ -130,7 +133,7 @@ export function useSales(profileId: string) {
       id: saleId,
       cardName,
       price,
-      commission,
+      commission: commissionAmount,
       saleDate: date,
       sellerId: sellerId,
     }, { merge: true });
