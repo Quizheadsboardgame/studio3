@@ -53,12 +53,18 @@ export function useSales(profileId: string) {
     return collection(db, "profiles", "staff", "sales");
   }, [db, user, profileId]);
 
+  const staffSellersRef = useMemoFirebase(() => {
+    if (!db || !user || profileId !== 'manager') return null;
+    return collection(db, "profiles", "staff", "sellers");
+  }, [db, user, profileId]);
+
   // Real-time data for primary profile
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   
-  // Real-time data for staff sales (only if manager)
+  // Real-time data for staff (only if manager)
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
+  const { data: staffSellersData, isLoading: staffSellersLoading } = useCollection<Seller>(staffSellersRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || profileId !== 'manager') && !!user;
 
@@ -69,10 +75,21 @@ export function useSales(profileId: string) {
     return [...primary, ...staff];
   }, [primarySalesData, staffSalesData, profileId]);
 
-  // Return full seller objects
+  // Combine sellers if manager
   const sellers = useMemo(() => {
-    return [...(sellersData || [])].sort((a, b) => a.name.localeCompare(b.name));
-  }, [sellersData]);
+    const primary = sellersData || [];
+    const staff = profileId === 'manager' ? (staffSellersData || []) : [];
+    
+    // Deduplicate by ID
+    const all = [...primary];
+    staff.forEach(s => {
+      if (!all.find(existing => existing.id === s.id)) {
+        all.push(s);
+      }
+    });
+
+    return all.sort((a, b) => a.name.localeCompare(b.name));
+  }, [sellersData, staffSellersData, profileId]);
 
   // Transform sales into the nested structure the UI expects: { [date]: { [sellerId]: Sale[] } }
   const salesByDate = useMemo(() => {

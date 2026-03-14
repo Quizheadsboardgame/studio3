@@ -365,6 +365,11 @@ export default function Dashboard() {
           <CardContent className="pt-6 space-y-6">
             {sellers.map((s) => {
               const showComm = isManagerAuthenticated;
+              const sellerDailySales = dailySalesData[s.id] || [];
+              const sellerDailyTotal = sellerDailySales.reduce((acc, curr) => acc + curr.price, 0);
+              const sellerDailyComm = sellerDailySales.reduce((acc, curr) => acc + (curr.commission || 0), 0);
+              const sellerPayout = sellerDailyTotal - sellerDailyComm;
+
               return (
                 <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-5 rounded-2xl items-end ring-1 ring-black/5 shadow-inner">
@@ -411,8 +416,8 @@ export default function Dashboard() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {dailySalesData[s.id]?.length > 0 ? (
-                          dailySalesData[s.id].map((sale) => {
+                        {sellerDailySales.length > 0 ? (
+                          sellerDailySales.map((sale) => {
                             const isEditing = editingSaleId === sale.id;
                             return (
                               <TableRow key={sale.id} className="hover:bg-muted/20 transition-colors">
@@ -502,20 +507,24 @@ export default function Dashboard() {
                     </Table>
                   </div>
                   
-                  <div className="flex justify-end pt-2 gap-4">
+                  <div className="flex flex-col md:flex-row justify-end pt-2 gap-4">
                     {isManagerAuthenticated && (
-                      <div className="bg-emerald-50 border border-emerald-100 px-6 py-4 rounded-2xl text-emerald-700">
-                        <span className="text-xs font-bold uppercase tracking-widest opacity-80 mr-4">Earned Commission:</span>
-                        <span className="text-xl font-black">
-                          £{(dailySalesData[s.id]?.reduce((acc, curr) => acc + (curr.commission || 0), 0) || 0).toFixed(2)}
-                        </span>
+                      <div className="flex flex-col gap-2 bg-emerald-50 border border-emerald-100 px-6 py-4 rounded-2xl">
+                        <div className="flex justify-between items-center gap-8">
+                          <span className="text-xs font-bold uppercase tracking-widest text-emerald-700/70">Total Earned Comm:</span>
+                          <span className="text-xl font-black text-emerald-700">£{sellerDailyComm.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-8 border-t border-emerald-200 pt-2">
+                          <span className="text-xs font-bold uppercase tracking-widest text-emerald-700/70">Seller Payout Run-down:</span>
+                          <span className="text-xl font-black text-emerald-900">£{sellerPayout.toFixed(2)}</span>
+                        </div>
                       </div>
                     )}
-                    <div className="bg-primary shadow-xl shadow-primary/20 px-8 py-4 rounded-2xl border border-white/10 text-white">
-                      <span className="text-xs font-bold uppercase tracking-widest opacity-80 mr-4">Daily Total:</span>
-                      <span className="text-2xl font-black">
-                        £{(dailySalesData[s.id]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
-                      </span>
+                    <div className="bg-primary shadow-xl shadow-primary/20 px-8 py-4 rounded-2xl border border-white/10 text-white flex items-center justify-center">
+                      <div className="flex flex-col items-center">
+                        <span className="text-xs font-bold uppercase tracking-widest opacity-80">Daily Seller Total</span>
+                        <span className="text-2xl font-black">£{sellerDailyTotal.toFixed(2)}</span>
+                      </div>
                     </div>
                   </div>
                 </TabsContent>
