@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -145,9 +144,20 @@ export function useSales(profileId: string) {
       : salesRef;
 
     if (!targetRef || !saleId) return;
+
+    // Recalculate commission if price is updated
+    if (updatedFields.price !== undefined) {
+      const existingSale = combinedSalesData.find(s => s.id === saleId);
+      if (existingSale) {
+        const seller = sellers.find(s => s.id === existingSale.sellerId);
+        const commissionPercentage = seller?.defaultCommission || 0;
+        updatedFields.commission = (updatedFields.price * commissionPercentage) / 100;
+      }
+    }
+
     const docRef = doc(targetRef, saleId);
     updateDocumentNonBlocking(docRef, updatedFields);
-  }, [salesRef, staffSalesRef, profileId]);
+  }, [salesRef, staffSalesRef, profileId, sellers, combinedSalesData]);
 
   const deleteSale = useCallback((saleId: string, origin?: string) => {
     const targetRef = origin === 'staff' && profileId === 'manager' && staffSalesRef 
