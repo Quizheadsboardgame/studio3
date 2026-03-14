@@ -9,11 +9,9 @@ import {
   TrendingUp, 
   Users, 
   CreditCard, 
-  PieChart, 
   Trash2, 
   BrainCircuit, 
   Calendar as CalendarIcon,
-  Percent,
   Pencil,
   Check,
   X
@@ -24,12 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  ChartContainer, 
-  ChartTooltip, 
-  ChartTooltipContent, 
-} from "@/components/ui/chart";
-import { Bar, BarChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,7 +33,6 @@ export default function Dashboard() {
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales();
   
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [commission, setCommission] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [newSellerName, setNewSellerName] = useState("");
   const [activeTab, setActiveTab] = useState("");
@@ -71,8 +62,6 @@ export default function Dashboard() {
     let maxSellerTotal = 0;
     let topSellerName = "-";
 
-    const chartData: { name: string; total: number }[] = [];
-
     sellers.forEach((seller) => {
       const sellerSales = dailySalesData[seller] || [];
       const sellerTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
@@ -84,20 +73,14 @@ export default function Dashboard() {
         maxSellerTotal = sellerTotal;
         topSellerName = seller;
       }
-
-      chartData.push({ name: seller, total: sellerTotal });
     });
-
-    const netProfit = (totalSales * commission) / 100;
 
     return {
       totalSales,
       totalCards,
       topSellerName,
-      netProfit,
-      chartData,
     };
-  }, [sellers, dailySalesData, commission]);
+  }, [sellers, dailySalesData]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -200,17 +183,6 @@ export default function Dashboard() {
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
             />
-          </div>
-          <div className="flex items-center gap-2 bg-card border rounded-lg px-3 py-2 shadow-sm">
-            <Percent className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Comm:</span>
-            <input 
-              type="number" 
-              className="bg-transparent outline-none text-sm w-12" 
-              value={commission}
-              onChange={(e) => setCommission(Number(e.target.value))}
-            />
-            <span className="text-sm">%</span>
           </div>
           <Button onClick={handleExportCSV} variant="outline" className="gap-2 shadow-sm">
             <Download className="w-4 h-4" /> Export CSV
@@ -390,12 +362,11 @@ export default function Dashboard() {
       <Separator />
 
       {/* Dashboard Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { title: "Daily Sales", value: `£${stats.totalSales.toFixed(2)}`, icon: TrendingUp, color: "text-blue-600" },
           { title: "Cards Sold", value: stats.totalCards, icon: CreditCard, color: "text-teal-600" },
           { title: "Top Seller", value: stats.topSellerName, icon: Users, color: "text-indigo-600" },
-          { title: "Newton's Profit", value: `£${stats.netProfit.toFixed(2)}`, icon: PieChart, color: "text-emerald-600" },
         ].map((stat, idx) => (
           <Card key={idx} className="overflow-hidden border-none shadow-md">
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
@@ -409,38 +380,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Sales Chart */}
-        <Card className="lg:col-span-2 shadow-lg border-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              Daily Performance by Seller
-            </CardTitle>
-            <CardDescription>Sales distribution for {format(new Date(selectedDate), "PPPP")}</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ChartContainer config={{ 
-              total: { label: "Sales Total (£)", color: "hsl(var(--primary))" }
-            }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stats.chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar 
-                    dataKey="total" 
-                    fill="var(--color-total)" 
-                    radius={[4, 4, 0, 0]} 
-                    animationDuration={1500}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-8">
         {/* AI Insights Tool */}
         <Card className="shadow-lg border-none bg-gradient-to-br from-primary/5 to-accent/10">
           <CardHeader>
