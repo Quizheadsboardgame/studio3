@@ -183,6 +183,118 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Seller Specific Sales Entry & Tables - MOVED TO TOP */}
+      <Card className="shadow-lg border-none overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <CardHeader className="pb-0 border-b bg-muted/20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <CardTitle className="text-xl">Daily Sales Logs</CardTitle>
+              <ScrollArea className="max-w-full">
+                <TabsList className="bg-muted/50 p-1 mb-2">
+                  {sellers.map((s) => (
+                    <TabsTrigger key={s} value={s} className="px-6 data-[state=active]:bg-card">
+                      {s}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </ScrollArea>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6">
+            {sellers.map((s) => (
+              <TabsContent key={s} value={s} className="space-y-6 mt-0 focus-visible:outline-none">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-4 rounded-lg items-end">
+                  <div className="md:col-span-6 space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Card Name</label>
+                    <Input 
+                      placeholder="Enter card name..." 
+                      value={newSaleCard}
+                      onChange={(e) => setNewSaleCard(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-4 space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sale Price (£)</label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      value={newSalePrice}
+                      onChange={(e) => setNewSalePrice(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Button 
+                      className="w-full" 
+                      onClick={() => {
+                        const priceNum = parseFloat(newSalePrice);
+                        if (newSaleCard && !isNaN(priceNum)) {
+                          addSale(selectedDate, s, newSaleCard, priceNum);
+                          setNewSaleCard("");
+                          setNewSalePrice("");
+                        }
+                      }}
+                    >
+                      Add Entry
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border rounded-lg overflow-hidden bg-card">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Card Name</TableHead>
+                        <TableHead className="text-right">Price</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dailySalesData[s]?.length > 0 ? (
+                        dailySalesData[s].map((sale, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
+                            <TableCell className="font-medium">{sale.card}</TableCell>
+                            <TableCell className="text-right font-semibold">£{sale.price.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                onClick={() => deleteSale(selectedDate, s, i)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                            No sales recorded for this date.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                
+                <div className="flex justify-end pt-2">
+                  <div className="bg-primary/5 px-6 py-3 rounded-lg border border-primary/10">
+                    <span className="text-sm text-muted-foreground mr-4">Seller Daily Total:</span>
+                    <span className="text-xl font-bold text-primary">
+                      £{(dailySalesData[s]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </TabsContent>
+            ))}
+          </CardContent>
+        </Tabs>
+      </Card>
+
+      <Separator />
+
       {/* Dashboard Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -272,201 +384,90 @@ export default function Dashboard() {
 
       <Separator />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Search & Seller Management */}
-        <div className="lg:col-span-4 space-y-6">
-          <Card className="shadow-md border-none">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg">Global Search</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search card name across all dates..." 
-                  className="pl-9"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              {searchQuery && (
-                <ScrollArea className="mt-4 h-[200px] border rounded-md">
-                  {searchResults.length > 0 ? (
-                    <div className="p-3 space-y-3">
-                      {searchResults.map((res, i) => (
-                        <div key={i} className="text-xs space-y-1 border-b pb-2 last:border-0">
-                          <div className="flex justify-between font-medium">
-                            <span className="text-primary">{res.card}</span>
-                            <span>£{res.price.toFixed(2)}</span>
-                          </div>
-                          <div className="text-muted-foreground flex justify-between">
-                            <span>{res.seller}</span>
-                            <span>{res.date}</span>
-                          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Global Search */}
+        <Card className="shadow-md border-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Global Search</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search card name across all dates..." 
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            {searchQuery && (
+              <ScrollArea className="mt-4 h-[200px] border rounded-md">
+                {searchResults.length > 0 ? (
+                  <div className="p-3 space-y-3">
+                    {searchResults.map((res, i) => (
+                      <div key={i} className="text-xs space-y-1 border-b pb-2 last:border-0">
+                        <div className="flex justify-between font-medium">
+                          <span className="text-primary">{res.card}</span>
+                          <span>£{res.price.toFixed(2)}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center text-sm text-muted-foreground">No matches found</div>
-                  )}
-                </ScrollArea>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md border-none">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg">Seller Roster</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input 
-                  placeholder="New seller name..." 
-                  value={newSellerName}
-                  onChange={(e) => setNewSellerName(e.target.value)}
-                />
-                <Button 
-                  size="icon" 
-                  onClick={() => {
-                    if (newSellerName) {
-                      addSeller(newSellerName);
-                      setNewSellerName("");
-                      setActiveTab(newSellerName);
-                    }
-                  }}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {sellers.map((s) => (
-                  <Badge 
-                    key={s} 
-                    variant="secondary" 
-                    className="pl-3 pr-1 py-1 flex items-center gap-1 group cursor-default"
-                  >
-                    {s}
-                    <button 
-                      onClick={() => removeSeller(s)}
-                      className="p-0.5 hover:bg-destructive hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Seller Specific Sales Entry & Tables */}
-        <Card className="lg:col-span-8 shadow-md border-none">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <CardHeader className="pb-0 border-b">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <CardTitle className="text-xl">Seller Logs</CardTitle>
-                <ScrollArea className="max-w-full">
-                  <TabsList className="bg-muted/50 p-1 mb-2">
-                    {sellers.map((s) => (
-                      <TabsTrigger key={s} value={s} className="px-6 data-[state=active]:bg-card">
-                        {s}
-                      </TabsTrigger>
+                        <div className="text-muted-foreground flex justify-between">
+                          <span>{res.seller}</span>
+                          <span>{res.date}</span>
+                        </div>
+                      </div>
                     ))}
-                  </TabsList>
-                </ScrollArea>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              {sellers.map((s) => (
-                <TabsContent key={s} value={s} className="space-y-6 mt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-muted/30 p-4 rounded-lg items-end">
-                    <div className="md:col-span-6 space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Card Name</label>
-                      <Input 
-                        placeholder="Enter card name..." 
-                        value={newSaleCard}
-                        onChange={(e) => setNewSaleCard(e.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-4 space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sale Price (£)</label>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00" 
-                        value={newSalePrice}
-                        onChange={(e) => setNewSalePrice(e.target.value)}
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Button 
-                        className="w-full" 
-                        onClick={() => {
-                          const priceNum = parseFloat(newSalePrice);
-                          if (newSaleCard && !isNaN(priceNum)) {
-                            addSale(selectedDate, s, newSaleCard, priceNum);
-                            setNewSaleCard("");
-                            setNewSalePrice("");
-                          }
-                        }}
-                      >
-                        Add Entry
-                      </Button>
-                    </div>
                   </div>
+                ) : (
+                  <div className="p-8 text-center text-sm text-muted-foreground">No matches found</div>
+                )}
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
 
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-muted/50">
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Card Name</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {dailySalesData[s]?.length > 0 ? (
-                          dailySalesData[s].map((sale, i) => (
-                            <TableRow key={i}>
-                              <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
-                              <TableCell className="font-medium">{sale.card}</TableCell>
-                              <TableCell className="text-right font-semibold">£{sale.price.toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                  onClick={() => deleteSale(selectedDate, s, i)}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                              No sales recorded for this date.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  
-                  <div className="flex justify-end pt-2">
-                    <div className="bg-primary/5 px-6 py-3 rounded-lg border border-primary/10">
-                      <span className="text-sm text-muted-foreground mr-4">Seller Daily Total:</span>
-                      <span className="text-xl font-bold text-primary">
-                        £{(dailySalesData[s]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </TabsContent>
+        {/* Seller Management */}
+        <Card className="shadow-md border-none">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Seller Roster</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Input 
+                placeholder="New seller name..." 
+                value={newSellerName}
+                onChange={(e) => setNewSellerName(e.target.value)}
+              />
+              <Button 
+                size="icon" 
+                onClick={() => {
+                  if (newSellerName) {
+                    addSeller(newSellerName);
+                    setNewSellerName("");
+                    setActiveTab(newSellerName);
+                  }
+                }}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {sellers.map((s) => (
+                <Badge 
+                  key={s} 
+                  variant="secondary" 
+                  className="pl-3 pr-1 py-1 flex items-center gap-1 group cursor-default"
+                >
+                  {s}
+                  <button 
+                    onClick={() => removeSeller(s)}
+                    className="p-0.5 hover:bg-destructive hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </Badge>
               ))}
-            </CardContent>
-          </Tabs>
+            </div>
+          </CardContent>
         </Card>
       </div>
     </div>
