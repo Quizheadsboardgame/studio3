@@ -1,9 +1,7 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
-import html2canvas from "html2canvas";
 import { 
   Plus, 
   Search, 
@@ -25,8 +23,7 @@ import {
   CreditCard,
   TrendingUp,
   Sparkles,
-  BarChart3,
-  Camera
+  BarChart3
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,7 +103,6 @@ export default function Dashboard() {
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
@@ -307,33 +303,6 @@ export default function Dashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const handleSaveReportAsImage = async (sellerId: string) => {
-    const element = document.getElementById(`report-content-${sellerId}`);
-    if (!element) return;
-
-    setIsCapturing(true);
-    try {
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        backgroundColor: "#ffffff",
-        logging: false,
-        useCORS: true,
-      });
-      
-      const image = canvas.toDataURL("image/png", 1.0);
-      const link = document.createElement("a");
-      link.download = `NC_Report_${sellerId}_${selectedDate}.png`;
-      link.href = image;
-      link.click();
-      toast({ title: "Report Saved", description: "Sales report image has been downloaded." });
-    } catch (error) {
-      console.error("Capture failed", error);
-      toast({ variant: "destructive", title: "Capture Failed", description: "Could not save report image." });
-    } finally {
-      setIsCapturing(false);
-    }
   };
 
   const startEditing = (sale: Sale) => {
@@ -843,7 +812,7 @@ export default function Dashboard() {
 
                 return (
                   <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
-                    <div id={`report-content-${s.id}`} className="space-y-6 p-4 rounded-3xl bg-white border border-transparent">
+                    <div className="space-y-6 p-4 rounded-3xl bg-white border border-transparent">
                       <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
                         <Table>
                           <TableHeader className="bg-muted/30">
@@ -959,18 +928,6 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex justify-center pt-4">
-                      <Button 
-                        onClick={() => handleSaveReportAsImage(s.id)}
-                        disabled={isCapturing || sellerDailySales.length === 0}
-                        variant="outline"
-                        className="rounded-xl h-12 px-8 gap-3 font-black uppercase tracking-widest text-[10px] border-primary/20 hover:bg-primary/5 shadow-sm"
-                      >
-                        {isCapturing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                        Save Report as Photo
-                      </Button>
                     </div>
                   </TabsContent>
                 );
