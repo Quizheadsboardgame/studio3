@@ -22,7 +22,9 @@ import {
   Activity,
   CreditCard,
   TrendingUp,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  BarChart3
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +58,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
 
 import { useSales, Sale } from "@/hooks/use-sales";
 import { 
@@ -64,6 +68,7 @@ import {
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 
 type ProfileType = 'manager' | 'staff';
 
@@ -97,6 +102,9 @@ export default function Dashboard() {
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
 
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     
@@ -129,6 +137,17 @@ export default function Dashboard() {
   const allDailySales = useMemo(() => {
     return Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || ''));
   }, [dailySalesData]);
+
+  const chartData = useMemo(() => {
+    return sellers.map(seller => {
+      const sellerSales = dailySalesData[seller.id] || [];
+      return {
+        name: seller.name,
+        total: sellerSales.reduce((acc, s) => acc + s.price, 0),
+        commission: sellerSales.reduce((acc, s) => acc + (s.commission || 0), 0)
+      };
+    }).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
+  }, [sellers, dailySalesData]);
 
   const dailyStats = useMemo(() => {
     let totalSales = 0;
@@ -237,6 +256,29 @@ export default function Dashboard() {
       toast({ title: "Authenticated", description: "Manager session active for 24 hours." });
     } else {
       toast({ variant: "destructive", title: "Access Denied", description: "Incorrect password." });
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    setIsGeneratingSummary(true);
+    setAiSummary(null);
+    try {
+      const inputData: Record<string, { card: string, price: number }[]> = {};
+      Object.entries(dailySalesData).forEach(([sellerId, sellerSales]) => {
+        const seller = sellers.find(s => s.id === sellerId);
+        const name = seller ? seller.name : sellerId;
+        inputData[name] = sellerSales.map(s => ({ card: s.cardName, price: s.price }));
+      });
+
+      const result = await generateDailySalesSummary({
+        date: selectedDate,
+        dailySales: inputData
+      });
+      setAiSummary(result.summary);
+    } catch (e) {
+      toast({ variant: "destructive", title: "AI Error", description: "Could not generate daily summary." });
+    } finally {
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -411,6 +453,78 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {isManagerAuthenticated && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-1000">
+          <Card className="lg:col-span-2 shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card">
+            <CardHeader className="flex flex-row items-center justify-between border-b bg-muted/10">
+              <div>
+                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" /> Daily Revenue Distribution
+                </CardTitle>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">Performance by Seller Entity</p>
+              </div>
+              <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest bg-primary/5 text-primary">Manager View</Badge>
+            </CardHeader>
+            <CardContent className="pt-8 h-[300px]">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} tickFormatter={(val) => `£${val}`} />
+                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                    <Bar dataKey="total" radius={[8, 8, 0, 0]}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={index === 0 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.4)'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 italic font-medium">
+                  No sales data available for {selectedDate}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-primary/5">
+            <CardHeader className="border-b bg-primary/10">
+              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" /> AI Insights Agent
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {aiSummary ? (
+                <div className="space-y-4 animate-in slide-in-from-top-2">
+                  <p className="text-sm font-medium leading-relaxed text-foreground/80 bg-white/50 p-6 rounded-2xl ring-1 ring-primary/10 italic">
+                    "{aiSummary}"
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setAiSummary(null)} className="w-full rounded-xl font-bold uppercase tracking-widest text-[10px]">Clear Insights</Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
+                  <div className="bg-primary/10 p-4 rounded-3xl">
+                    <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-sm uppercase tracking-tight">Generate Daily Brief</h4>
+                    <p className="text-[10px] text-muted-foreground font-medium px-4">Our AI agent will analyze today's logs and identify emerging trends & top sellers.</p>
+                  </div>
+                  <Button 
+                    onClick={handleGenerateSummary} 
+                    disabled={isGeneratingSummary || allDailySales.length === 0}
+                    className="rounded-xl px-8 h-12 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-[10px]"
+                  >
+                    {isGeneratingSummary ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                    Generate Insights
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Card className="shadow-2xl border-none overflow-hidden rounded-2xl ring-1 ring-black/5 animate-in slide-in-from-bottom-8 duration-1000">
         {profileId === 'staff' ? (
@@ -864,7 +978,7 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          <Card className="shadow-2xl border-none h-[300px] rounded-3xl ring-1 ring-black/5 overflow-hidden">
+          <Card className="shadow-2xl border-none h-[400px] rounded-3xl ring-1 ring-black/5 overflow-hidden">
             <CardHeader className="pb-4 bg-muted/10 border-b">
               <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -874,7 +988,7 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[220px] p-6">
+              <ScrollArea className="h-[320px] p-6">
                 {recentActivity.length > 0 ? (
                   <div className="space-y-4">
                     {recentActivity.map((act, i) => (
