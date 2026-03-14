@@ -166,9 +166,18 @@ export default function Dashboard() {
 
   const handleUpdateSale = (seller: string, index: number) => {
     const priceNum = parseFloat(editPrice);
-    if (editCard && !isNaN(priceNum)) {
-      updateSale(selectedDate, seller, index, { card: editCard, price: priceNum });
+    if (editCard.trim() && !isNaN(priceNum)) {
+      updateSale(selectedDate, seller, index, { card: editCard.trim(), price: priceNum });
       cancelEditing();
+    }
+  };
+
+  const handleAddSale = (seller: string) => {
+    const priceNum = parseFloat(newSalePrice);
+    if (newSaleCard.trim() && !isNaN(priceNum)) {
+      addSale(selectedDate, seller, newSaleCard.trim(), priceNum);
+      setNewSaleCard("");
+      setNewSalePrice("");
     }
   };
 
@@ -236,6 +245,7 @@ export default function Dashboard() {
                       placeholder="Enter card name..." 
                       value={newSaleCard}
                       onChange={(e) => setNewSaleCard(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s)}
                     />
                   </div>
                   <div className="md:col-span-4 space-y-2">
@@ -246,19 +256,14 @@ export default function Dashboard() {
                       placeholder="0.00" 
                       value={newSalePrice}
                       onChange={(e) => setNewSalePrice(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddSale(s)}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <Button 
                       className="w-full" 
-                      onClick={() => {
-                        const priceNum = parseFloat(newSalePrice);
-                        if (newSaleCard && !isNaN(priceNum)) {
-                          addSale(selectedDate, s, newSaleCard, priceNum);
-                          setNewSaleCard("");
-                          setNewSalePrice("");
-                        }
-                      }}
+                      onClick={() => handleAddSale(s)}
+                      disabled={!newSaleCard.trim() || !newSalePrice}
                     >
                       Add Entry
                     </Button>
@@ -287,7 +292,9 @@ export default function Dashboard() {
                                   <Input 
                                     className="h-8 py-0" 
                                     value={editCard} 
-                                    onChange={(e) => setEditCard(e.target.value)} 
+                                    onChange={(e) => setEditCard(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(s, i)}
+                                    autoFocus
                                   />
                                 ) : (
                                   <span className="font-medium">{sale.card}</span>
@@ -302,6 +309,7 @@ export default function Dashboard() {
                                       step="0.01" 
                                       value={editPrice} 
                                       onChange={(e) => setEditPrice(e.target.value)} 
+                                      onKeyDown={(e) => e.key === 'Enter' && handleUpdateSale(s, i)}
                                     />
                                   </div>
                                 ) : (
@@ -448,7 +456,7 @@ export default function Dashboard() {
             </p>
             {aiSummary ? (
               <ScrollArea className="h-[180px] rounded-md border p-4 bg-card/50">
-                <p className="text-sm leading-relaxed">{aiSummary}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
               </ScrollArea>
             ) : (
               <div className="h-[180px] flex items-center justify-center border border-dashed rounded-md bg-white/30">
@@ -522,6 +530,13 @@ export default function Dashboard() {
                 placeholder="New seller name..." 
                 value={newSellerName}
                 onChange={(e) => setNewSellerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newSellerName) {
+                    addSeller(newSellerName);
+                    setNewSellerName("");
+                    setActiveTab(newSellerName);
+                  }
+                }}
               />
               <Button 
                 size="icon" 

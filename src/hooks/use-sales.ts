@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export type Sale = {
   card: string;
@@ -20,23 +20,33 @@ export function useSales() {
   const [sales, setSales] = useState<SalesData>({});
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // Load from localStorage on mount
   useEffect(() => {
     const storedSellers = localStorage.getItem("nc_sellers");
     const storedSales = localStorage.getItem("nc_sales");
 
     if (storedSellers) {
-      setSellers(JSON.parse(storedSellers));
+      try {
+        setSellers(JSON.parse(storedSellers));
+      } catch (e) {
+        setSellers(DEFAULT_SELLERS);
+      }
     } else {
       setSellers(DEFAULT_SELLERS);
     }
 
     if (storedSales) {
-      setSales(JSON.parse(storedSales));
+      try {
+        setSales(JSON.parse(storedSales));
+      } catch (e) {
+        setSales({});
+      }
     }
     
     setIsLoaded(true);
   }, []);
 
+  // Save to localStorage when state changes
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem("nc_sellers", JSON.stringify(sellers));
@@ -49,48 +59,71 @@ export function useSales() {
     }
   }, [sales, isLoaded]);
 
-  const addSeller = (name: string) => {
-    if (!name || sellers.includes(name)) return;
-    setSellers([...sellers, name]);
-  };
-
-  const removeSeller = (name: string) => {
-    setSellers(sellers.filter((s) => s !== name));
-  };
-
-  const addSale = (date: string, seller: string, card: string, price: number) => {
-    setSales((prev) => {
-      const newSales = { ...prev };
-      if (!newSales[date]) newSales[date] = {};
-      if (!newSales[date][seller]) newSales[date][seller] = [];
-      newSales[date][seller] = [...newSales[date][seller], { card, price }];
-      return newSales;
+  const addSeller = useCallback((name: string) => {
+    if (!name) return;
+    setSellers((prev) => {
+      if (prev.includes(name)) return prev;
+      return [...prev, name];
     });
-  };
+  }, []);
 
-  const updateSale = (date: string, seller: string, index: number, updatedSale: Sale) => {
-    setSales((prev) => {
-      const newSales = { ...prev };
-      if (newSales[date] && newSales[date][seller]) {
-        const updatedSellerSales = [...newSales[date][seller]];
-        updatedSellerSales[index] = updatedSale;
-        newSales[date][seller] = updatedSellerSales;
-      }
-      return newSales;
-    });
-  };
+  const removeSeller = useCallback((name: string) => {
+    setSellers((prev) => prev.filter((s) => s !== name));
+  }, []);
 
-  const deleteSale = (date: string, seller: string, index: number) => {
+  const addSale = useCallback((date: string, seller: string, card: string, price: number) => {
     setSales((prev) => {
-      const newSales = { ...prev };
-      if (newSales[date] && newSales[date][seller]) {
-        const updatedSellerSales = [...newSales[date][seller]];
-        updatedSellerSales.splice(index, 1);
-        newSales[date][seller] = updatedSellerSales;
-      }
-      return newSales;
+      const currentDay = prev[date] || {};
+      const currentSellerSales = currentDay[seller] || [];
+      
+      return {
+        ...prev,
+        [date]: {
+          ...currentDay,
+          [seller]: [...currentSellerSales, { card, price }]
+        }
+      };
     });
-  };
+  }, []);
+
+  const updateSale = useCallback((date: string, seller: string, index: number, updatedSale: Sale) => {
+    setSales((prev) => {
+      const currentDay = prev[date];
+      if (!currentDay) return prev;
+      
+      const currentSellerSales = currentDay[seller];
+      if (!currentSellerSales) return prev;
+
+      const newSellerSales = [...currentSellerSales];
+      newSellerSales[index] = updatedSale;
+
+      return {
+        ...prev,
+        [date]: {
+          ...currentDay,
+          [seller]: newSellerSales
+        }
+      };
+    });
+  }, []);
+
+  const deleteSale = useCallback((date: string, seller: string, index: number) => {
+    setSales((prev) => {
+      const currentDay = prev[date];
+      if (!currentDay) return prev;
+      
+      const currentSellerSales = currentDay[seller];
+      if (!currentSellerSales) return prev;
+
+      return {
+        ...prev,
+        [date]: {
+          ...currentDay,
+          [seller]: currentSellerSales.filter((_, i) => i !== index)
+        }
+      };
+    });
+  }, []);
 
   return {
     sellers,
