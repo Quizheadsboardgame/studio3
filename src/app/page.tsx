@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -14,7 +14,9 @@ import {
   Calendar as CalendarIcon,
   Pencil,
   Check,
-  X
+  X,
+  History,
+  Coins
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -56,7 +58,8 @@ export default function Dashboard() {
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
 
-  const stats = useMemo(() => {
+  // Daily Stats
+  const dailyStats = useMemo(() => {
     let totalSales = 0;
     let totalCards = 0;
     let maxSellerTotal = 0;
@@ -75,12 +78,48 @@ export default function Dashboard() {
       }
     });
 
-    return {
-      totalSales,
-      totalCards,
-      topSellerName,
-    };
+    return { totalSales, totalCards, topSellerName };
   }, [sellers, dailySalesData]);
+
+  // All-Time Stats
+  const allTimeStats = useMemo(() => {
+    let totalSales = 0;
+    let totalCards = 0;
+    const sellerTotals: Record<string, number> = {};
+
+    Object.values(sales).forEach((daySales) => {
+      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+        const dayTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
+        totalSales += dayTotal;
+        totalCards += sellerSales.length;
+        sellerTotals[seller] = (sellerTotals[seller] || 0) + dayTotal;
+      });
+    });
+
+    let topSeller = "-";
+    let maxTotal = 0;
+    Object.entries(sellerTotals).forEach(([seller, total]) => {
+      if (total > maxTotal) {
+        maxTotal = total;
+        topSeller = seller;
+      }
+    });
+
+    return { totalSales, totalCards, topSeller };
+  }, [sales]);
+
+  const recentActivity = useMemo(() => {
+    const all: { date: string; seller: string; card: string; price: number }[] = [];
+    Object.entries(sales).forEach(([date, daySales]) => {
+      Object.entries(daySales).forEach(([seller, sellerSales]) => {
+        sellerSales.forEach((sale) => {
+          all.push({ date, seller, card: sale.card, price: sale.price });
+        });
+      });
+    });
+    // Sort by date descending
+    return all.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+  }, [sales]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -113,7 +152,7 @@ export default function Dashboard() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `newtons_collectables_all_sales.csv`);
+    link.setAttribute("download", `newtons_collectables_full_vault.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -171,7 +210,7 @@ export default function Dashboard() {
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-primary">NewtCollect Analytics</h1>
-          <p className="text-muted-foreground">Manage your card collectables sales efficiently.</p>
+          <p className="text-muted-foreground">Professional Vault & Sales Management</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -185,17 +224,20 @@ export default function Dashboard() {
             />
           </div>
           <Button onClick={handleExportCSV} variant="outline" className="gap-2 shadow-sm">
-            <Download className="w-4 h-4" /> Export CSV
+            <Download className="w-4 h-4" /> Export All Data
           </Button>
         </div>
       </header>
 
-      {/* Seller Specific Sales Entry & Tables */}
+      {/* Seller Logs - Main Entry Point */}
       <Card className="shadow-lg border-none overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <CardHeader className="pb-0 border-b bg-muted/20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <CardTitle className="text-xl">Daily Sales Logs</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-xl">Daily Sales Logs</CardTitle>
+                <Badge variant="outline" className="bg-white/50">{selectedDate}</Badge>
+              </div>
               <ScrollArea className="max-w-full">
                 <TabsList className="bg-muted/50 p-1 mb-2">
                   {sellers.map((s) => (
@@ -237,7 +279,7 @@ export default function Dashboard() {
                       onClick={() => handleAddSale(s)}
                       disabled={!newSaleCard.trim() || !newSalePrice}
                     >
-                      Add Entry
+                      <Plus className="w-4 h-4 mr-2" /> Add Entry
                     </Button>
                   </div>
                 </div>
@@ -347,7 +389,7 @@ export default function Dashboard() {
                 
                 <div className="flex justify-end pt-2">
                   <div className="bg-primary/5 px-6 py-3 rounded-lg border border-primary/10">
-                    <span className="text-sm text-muted-foreground mr-4">Seller Daily Total:</span>
+                    <span className="text-sm text-muted-foreground mr-4">{s} Total ({selectedDate}):</span>
                     <span className="text-xl font-bold text-primary">
                       £{(dailySalesData[s]?.reduce((acc, curr) => acc + curr.price, 0) || 0).toFixed(2)}
                     </span>
@@ -359,61 +401,129 @@ export default function Dashboard() {
         </Tabs>
       </Card>
 
-      <Separator />
+      {/* Analytics Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Daily Stats Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-primary" /> Daily Performance
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="border-none shadow-md bg-white">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Sales Total</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">£{dailyStats.totalSales.toFixed(2)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md bg-white">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Volume</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{dailyStats.totalCards} cards</div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md bg-white">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Top Daily</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold truncate">{dailyStats.topSellerName}</div>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Dashboard Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { title: "Daily Sales", value: `£${stats.totalSales.toFixed(2)}`, icon: TrendingUp, color: "text-blue-600" },
-          { title: "Cards Sold", value: stats.totalCards, icon: CreditCard, color: "text-teal-600" },
-          { title: "Top Seller", value: stats.topSellerName, icon: Users, color: "text-indigo-600" },
-        ].map((stat, idx) => (
-          <Card key={idx} className="overflow-hidden border-none shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-              <stat.icon className={`w-4 h-4 ${stat.color}`} />
+          <Card className="shadow-lg border-none bg-gradient-to-br from-primary/5 to-accent/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BrainCircuit className="w-4 h-4 text-primary" /> Market Insights
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+            <CardContent className="space-y-4">
+              {aiSummary ? (
+                <ScrollArea className="h-[120px] rounded-md border p-4 bg-card/50">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
+                </ScrollArea>
+              ) : (
+                <div className="h-[120px] flex items-center justify-center border border-dashed rounded-md bg-white/30">
+                  <p className="text-xs text-muted-foreground text-center px-8">
+                    Generate AI summary for {selectedDate}
+                  </p>
+                </div>
+              )}
+              <Button 
+                size="sm"
+                className="w-full bg-primary hover:bg-primary/90 text-white" 
+                onClick={handleGenerateAiSummary}
+                disabled={isAiLoading || dailyStats.totalSales === 0}
+              >
+                {isAiLoading ? "Processing..." : "Generate Insights"}
+              </Button>
             </CardContent>
           </Card>
-        ))}
-      </div>
+        </div>
 
-      <div className="grid grid-cols-1 gap-8">
-        {/* AI Insights Tool */}
-        <Card className="shadow-lg border-none bg-gradient-to-br from-primary/5 to-accent/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BrainCircuit className="w-5 h-5 text-primary" />
-              Market Insights
-            </CardTitle>
-            <CardDescription>AI-generated daily analysis</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground italic">
-              Analyze today's performance trends and top-performing categories with GenAI.
-            </p>
-            {aiSummary ? (
-              <ScrollArea className="h-[180px] rounded-md border p-4 bg-card/50">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
+        {/* All-Time Vault Section */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Coins className="w-4 h-4 text-emerald-600" /> Vault Lifetime Stats
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card className="border-none shadow-md bg-emerald-50/50">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Vault Value</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md bg-emerald-50/50">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">Total Sold</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold text-emerald-700">{allTimeStats.totalCards}</div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-md bg-emerald-50/50">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground">MVP Seller</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold text-emerald-700 truncate">{allTimeStats.topSeller}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-md border-none h-[220px]">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <History className="w-4 h-4 text-primary" /> Recent Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[140px]">
+                {recentActivity.length > 0 ? (
+                  <div className="space-y-2">
+                    {recentActivity.map((act, i) => (
+                      <div key={i} className="flex justify-between items-center text-xs border-b pb-2 last:border-0 last:pb-0">
+                        <div className="space-y-0.5">
+                          <div className="font-semibold">{act.card}</div>
+                          <div className="text-muted-foreground">{act.seller} • {act.date}</div>
+                        </div>
+                        <div className="font-bold text-primary">£{act.price.toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-xs text-muted-foreground py-8">No records found in vault.</p>
+                )}
               </ScrollArea>
-            ) : (
-              <div className="h-[180px] flex items-center justify-center border border-dashed rounded-md bg-white/30">
-                <p className="text-xs text-muted-foreground text-center px-8">
-                  Click the button below to generate a summary for {selectedDate}.
-                </p>
-              </div>
-            )}
-            <Button 
-              className="w-full bg-primary hover:bg-primary/90 text-white" 
-              onClick={handleGenerateAiSummary}
-              disabled={isAiLoading || stats.totalSales === 0}
-            >
-              {isAiLoading ? "Processing Analysis..." : "Generate Insights"}
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <Separator />
@@ -422,13 +532,13 @@ export default function Dashboard() {
         {/* Global Search */}
         <Card className="shadow-md border-none">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Global Search</CardTitle>
+            <CardTitle className="text-lg">Search Vault History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
-                placeholder="Search card name across all dates..." 
+                placeholder="Find any card from any date..." 
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -441,18 +551,18 @@ export default function Dashboard() {
                     {searchResults.map((res, i) => (
                       <div key={i} className="text-xs space-y-1 border-b pb-2 last:border-0">
                         <div className="flex justify-between font-medium">
-                          <span className="text-primary">{res.card}</span>
-                          <span>£{res.price.toFixed(2)}</span>
+                          <span className="text-primary font-bold">{res.card}</span>
+                          <span className="text-emerald-700 font-bold">£{res.price.toFixed(2)}</span>
                         </div>
                         <div className="text-muted-foreground flex justify-between">
-                          <span>{res.seller}</span>
-                          <span>{res.date}</span>
+                          <span>Sold by {res.seller}</span>
+                          <span>Recorded on {res.date}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-sm text-muted-foreground">No matches found</div>
+                  <div className="p-8 text-center text-sm text-muted-foreground">No matches found in history</div>
                 )}
               </ScrollArea>
             )}
