@@ -13,7 +13,10 @@ import {
   Trash2, 
   BrainCircuit, 
   Calendar as CalendarIcon,
-  Percent
+  Percent,
+  Pencil,
+  Check,
+  X
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,19 +28,17 @@ import {
   ChartContainer, 
   ChartTooltip, 
   ChartTooltipContent, 
-  ChartLegend, 
-  ChartLegendContent 
 } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-import { useSales } from "@/hooks/use-sales";
+import { useSales, Sale } from "@/hooks/use-sales";
 import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 
 export default function Dashboard() {
-  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale } = useSales();
+  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales();
   
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [commission, setCommission] = useState(10);
@@ -50,6 +51,11 @@ export default function Dashboard() {
   // New sale form state
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
+
+  // Editing state
+  const [editingIndex, setEditingIndex] = useState<{ seller: string; index: number } | null>(null);
+  const [editCard, setEditCard] = useState("");
+  const [editPrice, setEditPrice] = useState("");
 
   useEffect(() => {
     if (sellers.length > 0 && !activeTab) {
@@ -146,6 +152,26 @@ export default function Dashboard() {
     }
   };
 
+  const startEditing = (seller: string, index: number, sale: Sale) => {
+    setEditingIndex({ seller, index });
+    setEditCard(sale.card);
+    setEditPrice(sale.price.toString());
+  };
+
+  const cancelEditing = () => {
+    setEditingIndex(null);
+    setEditCard("");
+    setEditPrice("");
+  };
+
+  const handleUpdateSale = (seller: string, index: number) => {
+    const priceNum = parseFloat(editPrice);
+    if (editCard && !isNaN(priceNum)) {
+      updateSale(selectedDate, seller, index, { card: editCard, price: priceNum });
+      cancelEditing();
+    }
+  };
+
   if (!isLoaded) return null;
 
   return (
@@ -183,7 +209,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Seller Specific Sales Entry & Tables - MOVED TO TOP */}
+      {/* Seller Specific Sales Entry & Tables */}
       <Card className="shadow-lg border-none overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <CardHeader className="pb-0 border-b bg-muted/20">
@@ -246,28 +272,88 @@ export default function Dashboard() {
                         <TableHead>Date</TableHead>
                         <TableHead>Card Name</TableHead>
                         <TableHead className="text-right">Price</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
+                        <TableHead className="w-[100px]"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {dailySalesData[s]?.length > 0 ? (
-                        dailySalesData[s].map((sale, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
-                            <TableCell className="font-medium">{sale.card}</TableCell>
-                            <TableCell className="text-right font-semibold">£{sale.price.toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                onClick={() => deleteSale(selectedDate, s, i)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        dailySalesData[s].map((sale, i) => {
+                          const isEditing = editingIndex?.seller === s && editingIndex?.index === i;
+                          return (
+                            <TableRow key={i}>
+                              <TableCell className="text-xs text-muted-foreground">{selectedDate}</TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input 
+                                    className="h-8 py-0" 
+                                    value={editCard} 
+                                    onChange={(e) => setEditCard(e.target.value)} 
+                                  />
+                                ) : (
+                                  <span className="font-medium">{sale.card}</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {isEditing ? (
+                                  <div className="flex justify-end">
+                                    <Input 
+                                      className="h-8 py-0 w-24 text-right" 
+                                      type="number" 
+                                      step="0.01" 
+                                      value={editPrice} 
+                                      onChange={(e) => setEditPrice(e.target.value)} 
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="font-semibold">£{sale.price.toFixed(2)}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1 justify-end">
+                                  {isEditing ? (
+                                    <>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-emerald-600 hover:bg-emerald-50"
+                                        onClick={() => handleUpdateSale(s, i)}
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-muted-foreground hover:bg-muted"
+                                        onClick={cancelEditing}
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                                        onClick={() => startEditing(s, i, sale)}
+                                      >
+                                        <Pencil className="w-4 h-4" />
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                        onClick={() => deleteSale(selectedDate, s, i)}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       ) : (
                         <TableRow>
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">

@@ -68,6 +68,18 @@ export function useSales() {
     });
   };
 
+  const updateSale = (date: string, seller: string, index: number, updatedSale: Sale) => {
+    setSales((prev) => {
+      const newSales = { ...prev };
+      if (newSales[date] && newSales[date][seller]) {
+        const updatedSellerSales = [...newSales[date][seller]];
+        updatedSellerSales[index] = updatedSale;
+        newSales[date][seller] = updatedSellerSales;
+      }
+      return newSales;
+    });
+  };
+
   const deleteSale = (date: string, seller: string, index: number) => {
     setSales((prev) => {
       const newSales = { ...prev };
@@ -87,6 +99,7 @@ export function useSales() {
     addSeller,
     removeSeller,
     addSale,
+    updateSale,
     deleteSale,
   };
 }
