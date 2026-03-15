@@ -63,6 +63,21 @@
         "sellerId": {
           "type": "string",
           "description": "Reference to the Seller who made this sale."
+        },
+        "payoutStatus": {
+          "type": "string",
+          "description": "Current status of the payout for this sale.",
+          "enum": ["pending", "paid"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "The method used to pay the seller.",
+          "enum": ["cash", "transfer"]
+        },
+        "paidAt": {
+          "type": "string",
+          "description": "The timestamp when the payout was settled.",
+          "format": "date-time"
         }
       },
       "required": [

@@ -24,6 +24,9 @@ export type Sale = {
   saleDate: string;
   sellerId: string;
   profileOrigin?: string; // Track which profile the sale came from
+  payoutStatus?: 'pending' | 'paid';
+  paymentMethod?: 'cash' | 'transfer';
+  paidAt?: string;
 };
 
 export type Seller = {
@@ -106,7 +109,6 @@ export function useSales(profileId: string) {
     return result;
   }, [combinedSalesData]);
 
-  // Managers always provision to the 'staff' bucket so staff can log for them
   const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
     const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!name || !targetRef) return;
@@ -114,7 +116,6 @@ export function useSales(profileId: string) {
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
     const docRef = doc(targetRef, sellerId);
     
-    // Generate a random 6 character password for the seller
     const randomPassword = Math.random().toString(36).slice(-6).toUpperCase();
     
     setDocumentNonBlocking(docRef, { 
@@ -150,6 +151,7 @@ export function useSales(profileId: string) {
       commission: commissionAmount,
       saleDate: date,
       sellerId: sellerId,
+      payoutStatus: 'pending'
     }, { merge: true });
   }, [salesRef, sellers]);
 
@@ -177,14 +179,30 @@ export function useSales(profileId: string) {
     deleteDocumentNonBlocking(docRef);
   }, [salesRef, staffSalesRef]);
 
+  const markSalesAsPaid = useCallback((saleIds: string[], method: 'cash' | 'transfer', originMap: Record<string, string>) => {
+    saleIds.forEach(id => {
+      const origin = originMap[id];
+      const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
+      if (!targetRef) return;
+      const docRef = doc(targetRef, id);
+      updateDocumentNonBlocking(docRef, {
+        payoutStatus: 'paid',
+        paymentMethod: method,
+        paidAt: new Date().toISOString()
+      });
+    });
+  }, [salesRef, staffSalesRef]);
+
   return {
     sellers,
     sales: salesByDate,
+    combinedSalesData,
     isLoaded,
     addSeller,
     updateSeller,
     addSale,
     updateSale,
     deleteSale,
+    markSalesAsPaid
   };
 }

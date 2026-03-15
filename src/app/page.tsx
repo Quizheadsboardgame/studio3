@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -30,7 +31,9 @@ import {
   RefreshCw,
   Clock,
   Wallet,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Banknote,
+  Send
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,7 +112,7 @@ export default function Dashboard() {
   const [editSellerPass, setEditSellerPass] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
-  const { sellers, sales, isLoaded, addSeller, updateSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
+  const { sellers, sales, combinedSalesData, isLoaded, addSeller, updateSeller, addSale, deleteSale, updateSale, markSalesAsPaid } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,6 +127,9 @@ export default function Dashboard() {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
+
+  const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
+  const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
 
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
@@ -219,40 +225,42 @@ export default function Dashboard() {
     const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
 
     const forecast = {
-      thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, number> },
-      nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, number> },
+      thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> },
+      nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> },
       totalGlobalPending: 0
     };
 
-    Object.keys(sales).forEach(date => {
-      const dayData = sales[date];
-      const saleDateObj = parseISO(date);
+    combinedSalesData.forEach(sale => {
+      if (sale.payoutStatus === 'paid') return;
+
+      const saleDateObj = parseISO(sale.saleDate);
       const maturityDate = startOfDay(addDays(saleDateObj, 13));
+      const net = sale.price - (sale.commission || 0);
+      
+      const seller = sellers.find(s => s.id === sale.sellerId);
+      const sellerName = seller?.name || sale.sellerId;
 
-      Object.keys(dayData).forEach(sellerId => {
-        const sellerSales = dayData[sellerId];
-        const seller = sellers.find(s => s.id === sellerId);
-        const sellerName = seller?.name || sellerId;
+      forecast.totalGlobalPending += net;
 
-        sellerSales.forEach(sale => {
-          const net = sale.price - (sale.commission || 0);
-          forecast.totalGlobalPending += net;
-
-          if (!isAfter(maturityDate, thisFridayDate)) {
-            forecast.thisFriday.total += net;
-            forecast.thisFriday.count += 1;
-            forecast.thisFriday.sellers[sellerName] = (forecast.thisFriday.sellers[sellerName] || 0) + net;
-          } else if (!isAfter(maturityDate, nextFridayDate)) {
-            forecast.nextFriday.total += net;
-            forecast.nextFriday.count += 1;
-            forecast.nextFriday.sellers[sellerName] = (forecast.nextFriday.sellers[sellerName] || 0) + net;
-          }
-        });
-      });
+      if (!isAfter(maturityDate, thisFridayDate)) {
+        forecast.thisFriday.total += net;
+        forecast.thisFriday.count += 1;
+        if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+        forecast.thisFriday.sellers[sellerName].total += net;
+        forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
+        forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
+      } else if (!isAfter(maturityDate, nextFridayDate)) {
+        forecast.nextFriday.total += net;
+        forecast.nextFriday.count += 1;
+        if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+        forecast.nextFriday.sellers[sellerName].total += net;
+        forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
+        forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
+      }
     });
 
     return forecast;
-  }, [sales, sellers, profileId]);
+  }, [combinedSalesData, sellers, profileId]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -340,6 +348,18 @@ export default function Dashboard() {
       setNewSaleCard("");
       setNewSalePrice("");
       toast({ title: "Success", description: "Transaction logged in shared vault." });
+    }
+  };
+
+  const handleMarkBatchPaid = (method: 'cash' | 'transfer') => {
+    if (settlementBatch) {
+      markSalesAsPaid(settlementBatch.saleIds, method, settlementBatch.originMap);
+      setIsSettlementDialogOpen(false);
+      setSettlementBatch(null);
+      toast({ 
+        title: "Payout Settled", 
+        description: `Marked £${settlementBatch.total.toFixed(2)} as paid via ${method.toUpperCase()}.` 
+      });
     }
   };
 
@@ -661,10 +681,23 @@ export default function Dashboard() {
              </CardHeader>
              <CardContent className="p-6">
                 <div className="space-y-3">
-                   {Object.entries(payoutForecast.thisFriday.sellers).map(([name, amount], i) => (
-                      <div key={i} className="flex justify-between items-center text-xs p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                   {Object.entries(payoutForecast.thisFriday.sellers).map(([name, data], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl hover:bg-muted/30 transition-colors group">
                         <span className="font-bold text-muted-foreground">{name}</span>
-                        <span className="font-black">£{amount.toFixed(2)}</span>
+                        <div className="flex items-center gap-3">
+                           <span className="font-black">£{data.total.toFixed(2)}</span>
+                           <Button 
+                             size="sm" 
+                             variant="outline" 
+                             className="h-7 px-2 text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                             onClick={() => {
+                               setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
+                               setIsSettlementDialogOpen(true);
+                             }}
+                           >
+                             Settle
+                           </Button>
+                        </div>
                       </div>
                    ))}
                    {payoutForecast.thisFriday.count === 0 && (
@@ -693,10 +726,23 @@ export default function Dashboard() {
              </CardHeader>
              <CardContent className="p-6">
                 <div className="space-y-3">
-                   {Object.entries(payoutForecast.nextFriday.sellers).map(([name, amount], i) => (
-                      <div key={i} className="flex justify-between items-center text-xs p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                   {Object.entries(payoutForecast.nextFriday.sellers).map(([name, data], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl hover:bg-muted/30 transition-colors group">
                         <span className="font-bold text-muted-foreground">{name}</span>
-                        <span className="font-black">£{amount.toFixed(2)}</span>
+                        <div className="flex items-center gap-3">
+                           <span className="font-black">£{data.total.toFixed(2)}</span>
+                           <Button 
+                             size="sm" 
+                             variant="outline" 
+                             className="h-7 px-2 text-[8px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                             onClick={() => {
+                               setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
+                               setIsSettlementDialogOpen(true);
+                             }}
+                           >
+                             Settle
+                           </Button>
+                        </div>
                       </div>
                    ))}
                    {payoutForecast.nextFriday.count === 0 && (
@@ -868,7 +914,7 @@ export default function Dashboard() {
                         <TableRow className="border-none hover:bg-transparent">
                           <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Card Detail</TableHead>
                           <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Gross Sale</TableHead>
-                          <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Comm. Cut</TableHead>
+                          <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Payout Mode</TableHead>
                           <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14 pr-6">Your Payout</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -878,7 +924,15 @@ export default function Dashboard() {
                             <TableRow key={sale.id} className="hover:bg-accent/[0.02] border-muted/30 group transition-all duration-300">
                               <TableCell className="pl-6 h-16 font-bold text-foreground/90">{sale.cardName}</TableCell>
                               <TableCell className="text-right font-black text-primary">£{sale.price.toFixed(2)}</TableCell>
-                              <TableCell className="text-right font-black text-muted-foreground/60">£{(sale.commission || 0).toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-black">
+                                {sale.payoutStatus === 'paid' ? (
+                                  <Badge variant="outline" className="text-[8px] bg-emerald-50 text-emerald-600 border-emerald-200">
+                                    {sale.paymentMethod?.toUpperCase()}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground/40 text-[10px]">Pending</span>
+                                )}
+                              </TableCell>
                               <TableCell className="text-right pr-6 font-black text-emerald-600">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                             </TableRow>
                           ))
@@ -963,7 +1017,7 @@ export default function Dashboard() {
                         <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Seller</TableHead>
                         <TableHead className="font-black uppercase tracking-widest text-[10px] h-14">Card Detail</TableHead>
                         <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Sale Price</TableHead>
-                        {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Commission</TableHead>}
+                        {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Status</TableHead>}
                         <TableHead className="w-[120px] pr-6"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1007,7 +1061,13 @@ export default function Dashboard() {
                               </TableCell>
                               {isManagerAuthenticated && (
                                 <TableCell className="text-right">
-                                  <span className="font-black text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
+                                  {sale.payoutStatus === 'paid' ? (
+                                    <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[8px] h-5">
+                                      {sale.paymentMethod?.toUpperCase()}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-[9px] font-black text-muted-foreground/40 uppercase">Pending</span>
+                                  )}
                                 </TableCell>
                               )}
                               <TableCell className="pr-6">
@@ -1073,7 +1133,7 @@ export default function Dashboard() {
                               <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Timestamp</TableHead>
                               <TableHead className="font-black uppercase tracking-widest text-[10px] h-14">Card Detail</TableHead>
                               <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Sale Price</TableHead>
-                              {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Commission</TableHead>}
+                              {isManagerAuthenticated && <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Status</TableHead>}
                               <TableHead className="w-[120px] pr-6"></TableHead>
                             </TableRow>
                           </TableHeader>
@@ -1117,7 +1177,13 @@ export default function Dashboard() {
                                     </TableCell>
                                     {isManagerAuthenticated && (
                                       <TableCell className="text-right">
-                                        <span className="font-black text-emerald-600">£{(sale.commission || 0).toFixed(2)}</span>
+                                        {sale.payoutStatus === 'paid' ? (
+                                          <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[8px] h-5">
+                                            {sale.paymentMethod?.toUpperCase()}
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-[9px] font-black text-muted-foreground/40 uppercase">Pending</span>
+                                        )}
                                       </TableCell>
                                     )}
                                     <TableCell className="pr-6">
@@ -1206,6 +1272,9 @@ export default function Dashboard() {
                             <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-tighter py-0 px-2 bg-muted/80">
                               {sellers.find(s => s.id === act.sellerId)?.name || act.sellerId}
                             </Badge>
+                            {act.payoutStatus === 'paid' && (
+                              <Badge variant="outline" className="text-[8px] h-4 bg-emerald-50 text-emerald-600 border-emerald-100">SETTLED</Badge>
+                            )}
                             <span className="text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">{act.saleDate}</span>
                           </div>
                         </div>
@@ -1259,7 +1328,10 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className="text-[9px] font-black text-muted-foreground flex justify-between uppercase tracking-widest border-t pt-2 opacity-70">
-                            <span>Sold by {sellers.find(s => s.id === res.sellerId)?.name || res.sellerId}</span>
+                            <span className="flex items-center gap-2">
+                              Sold by {sellers.find(s => s.id === res.sellerId)?.name || res.sellerId}
+                              {res.payoutStatus === 'paid' && <Badge className="text-[8px] h-4 bg-emerald-50 text-emerald-600">PAID</Badge>}
+                            </span>
                             <span>{res.saleDate}</span>
                           </div>
                         </div>
@@ -1402,6 +1474,41 @@ export default function Dashboard() {
               </Button>
             )}
             <Button variant="ghost" onClick={() => setEditingSeller(null)} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSettlementDialogOpen} onOpenChange={setIsSettlementDialogOpen}>
+        <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center">
+            <div className="bg-emerald-100 p-4 rounded-3xl mb-4">
+              <Wallet className="w-8 h-8 text-emerald-600" />
+            </div>
+            <DialogTitle className="text-2xl font-black tracking-tight">Financial Settlement</DialogTitle>
+            <DialogDescription className="font-medium text-muted-foreground">
+              Authorize payout of <span className="text-foreground font-black">£{settlementBatch?.total.toFixed(2)}</span> for <span className="text-foreground font-black">{settlementBatch?.sellerId}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 grid grid-cols-2 gap-4">
+             <Button 
+               variant="outline" 
+               className="h-24 flex-col rounded-2xl gap-2 border-primary/20 hover:bg-primary/5 hover:border-primary/40 group transition-all"
+               onClick={() => handleMarkBatchPaid('cash')}
+             >
+                <Banknote className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />
+                <span className="font-black uppercase tracking-widest text-[10px]">Settled via Cash</span>
+             </Button>
+             <Button 
+               variant="outline" 
+               className="h-24 flex-col rounded-2xl gap-2 border-emerald-500/20 hover:bg-emerald-50 hover:border-emerald-500/40 group transition-all"
+               onClick={() => handleMarkBatchPaid('transfer')}
+             >
+                <Send className="w-6 h-6 text-emerald-600 group-hover:scale-110 transition-transform" />
+                <span className="font-black uppercase tracking-widest text-[10px]">Bank Transfer</span>
+             </Button>
+          </div>
+          <DialogFooter>
+             <Button variant="ghost" onClick={() => setIsSettlementDialogOpen(false)} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Cancel Settlement</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
