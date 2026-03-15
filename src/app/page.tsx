@@ -256,7 +256,7 @@ export default function Dashboard() {
       settlementsPaid: settlementsPaidToday,
       netProfit,
       runningCashPosition,
-      totalDailyVolume: totalSellerGross // The running total of card sales logged today
+      totalDailyVolume: totalSellerGross 
     };
   }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
 
@@ -590,7 +590,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black">£{financialSummary.runningCashPosition.toFixed(2)}</div>
+                <div className="text-2xl font-black">£{(financialSummary.runningCashPosition || 0).toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance (Intake - Paid)</div>
               </CardContent>
             </Card>
@@ -913,7 +913,7 @@ export default function Dashboard() {
                <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
                   <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
                   <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-primary'}`}>
-                    £{predictedFridayPosition.toFixed(2)}
+                    £{(predictedFridayPosition || 0).toFixed(2)}
                   </div>
                   <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
                     Based on current Running Liquidity minus This Friday's Liabilities
@@ -925,39 +925,47 @@ export default function Dashboard() {
 
       {/* Global Master Ledger Audit (Manager Only) */}
       {profileId === 'manager' && globalAudit && (
-        <div className="animate-in slide-in-from-bottom-8 duration-1000 delay-300">
+        <div className="animate-in slide-in-from-bottom-8 duration-1000 delay-300 pb-20">
           <span id="pnl-ledger" />
           <Separator className="my-12" />
           <div className="flex items-center gap-3 mb-8">
             <Scale className="w-6 h-6 text-primary" />
             <h2 className="text-2xl font-black uppercase tracking-tighter">Master Financial Ledger</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Recorded Sales</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Lifetime Recorded Sales</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalSellerGross.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Lifetime Shop Intake</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total In-House Rev</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">In-House Rev</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black text-blue-600">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total NC Commission</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black text-green-600">£{globalAudit.totalCommission.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Operational Expenses</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Expenses</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black text-destructive">£{globalAudit.totalExpenses.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Total Global P&L</CardTitle></CardHeader>
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
-                <div className={`text-xl font-black ${globalAudit.netProfit < 0 ? 'text-destructive' : 'text-primary'}`}>
-                  £{globalAudit.netProfit.toFixed(2)}
+                <div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-primary'}`}>
+                  £{(globalAudit.currentLiquidity || 0).toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Total Global P&L</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-black">
+                  £{(globalAudit.netProfit || 0).toFixed(2)}
                 </div>
               </CardContent>
             </Card>
