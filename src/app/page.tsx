@@ -100,7 +100,6 @@ export default function Dashboard() {
   const [isSellerPasswordDialogOpen, setIsSellerPasswordDialogOpen] = useState(false);
   const [sellerPasswordInput, setSellerPasswordInput] = useState("");
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
-  const [showSellerPasswords, setShowSellerPasswords] = useState(false);
 
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
@@ -429,14 +428,7 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" /> Seller Credentials
                 </CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
-                  onClick={() => setShowSellerPasswords(!showSellerPasswords)}
-                >
-                  {showSellerPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </Button>
+                <ShieldCheck className="w-4 h-4 text-muted-foreground/40" />
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
@@ -483,16 +475,14 @@ export default function Dashboard() {
                       key={s.id} 
                       className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-black/5"
                     >
-                      <div className="flex flex-col">
-                        <span className="font-black text-xs">{s.name}</span>
+                      <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-bold text-muted-foreground uppercase">{s.defaultCommission}% Comm.</span>
-                          {showSellerPasswords && (
-                            <Badge variant="outline" className="text-[8px] h-4 font-black bg-primary/5 border-primary/20 text-primary px-1">
-                              KEY: {s.password}
-                            </Badge>
-                          )}
+                          <span className="font-black text-xs">{s.name}</span>
+                          <Badge variant="outline" className="text-[10px] font-mono font-black bg-primary/10 border-primary/30 text-primary h-5 px-1.5 rounded-md">
+                            {s.password}
+                          </Badge>
                         </div>
+                        <span className="text-[9px] font-bold text-muted-foreground uppercase">{s.defaultCommission}% Commission</span>
                       </div>
                       <Button 
                         variant="ghost" 
@@ -900,10 +890,6 @@ export default function Dashboard() {
 
               {sellers.map((s) => {
                 const sellerDailySales = dailySalesData[s.id] || [];
-                const sellerDailyTotal = sellerDailySales.reduce((acc, curr) => acc + curr.price, 0);
-                const sellerDailyComm = sellerDailySales.reduce((acc, curr) => acc + (curr.commission || 0), 0);
-                const sellerPayout = sellerDailyTotal - sellerDailyComm;
-
                 return (
                   <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
                     <div className="space-y-6 p-4 rounded-3xl bg-white border border-transparent">
