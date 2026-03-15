@@ -127,27 +127,31 @@ export default function Dashboard() {
   const [sellerPasswordInput, setSellerPasswordInput] = useState("");
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
 
-  const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
-  const [editSellerName, setEditSellerName] = useState("");
-  const [editSellerComm, setEditSellerComm] = useState("");
-  const [editSellerPass, setEditSellerPass] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
-  const { sellers, sales, combinedSalesData, shopTotals, expenses, isLoaded, addSeller, updateSeller, addSale, deleteSale, updateSale, markSalesAsPaid, setShopTotal, addExpense, deleteExpense } = useSales(profileId === 'seller' ? 'staff' : profileId);
+  const { 
+    sellers, 
+    sales, 
+    combinedSalesData, 
+    shopTotals, 
+    expenses, 
+    isLoaded, 
+    addSeller, 
+    updateSeller, 
+    addSale, 
+    deleteSale, 
+    updateSale, 
+    markSalesAsPaid, 
+    setShopTotal, 
+    deleteShopTotal,
+    addExpense, 
+    deleteExpense 
+  } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
   const [selectedDate, setSelectedDate] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [newSellerName, setNewSellerName] = useState("");
-  const [newSellerCommission, setNewSellerCommission] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
-
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
   const [entrySellerId, setEntrySellerId] = useState("");
-
-  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
-  const [editCard, setEditCard] = useState("");
-  const [editPrice, setEditPrice] = useState("");
 
   const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
   const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
@@ -180,13 +184,23 @@ export default function Dashboard() {
     }
   }, [activeSellers, entrySellerId]);
 
+  const currentDayFinance = useMemo(() => shopTotals.find(t => t.date === selectedDate), [shopTotals, selectedDate]);
+  
+  // Pre-fill finance inputs when date or data changes
+  useEffect(() => {
+    if (currentDayFinance) {
+      setFinanceCash(currentDayFinance.cashIntake.toString());
+      setFinanceCard(currentDayFinance.cardIntake.toString());
+    } else {
+      setFinanceCash("");
+      setFinanceCard("");
+    }
+  }, [currentDayFinance, selectedDate]);
+
+  const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
   const allDailySales = useMemo(() => Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || '')), [dailySalesData]);
   const sellerDailySales = useMemo(() => (profileId !== 'seller' || !authenticatedSellerId) ? [] : dailySalesData[authenticatedSellerId] || [], [profileId, authenticatedSellerId, dailySalesData]);
-
-  // Finance calculations
-  const currentDayFinance = useMemo(() => shopTotals.find(t => t.date === selectedDate), [shopTotals, selectedDate]);
-  const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
 
   const sellerStats = useMemo(() => {
     const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
@@ -199,7 +213,6 @@ export default function Dashboard() {
     };
   }, [sellerDailySales, selectedDate]);
 
-  // Comprehensive Financial Logic
   const financialSummary = useMemo(() => {
     if (profileId !== 'manager') return null;
 
@@ -212,7 +225,6 @@ export default function Dashboard() {
     
     const totalExpenses = currentDayExpenses.reduce((acc, e) => acc + e.amount, 0);
     
-    // Settlements Paid today
     const settlementsPaidToday = combinedSalesData.reduce((acc, s) => {
       const isPaidToday = s.payoutStatus === 'paid' && s.paidAt && s.paidAt.startsWith(selectedDate);
       return isPaidToday ? acc + (s.price - (s.commission || 0)) : acc;
@@ -360,7 +372,14 @@ export default function Dashboard() {
     const cardNum = parseFloat(financeCard);
     if (!isNaN(cashNum) && !isNaN(cardNum)) {
       setShopTotal(selectedDate, cashNum, cardNum);
-      toast({ title: "Finance Logged", description: "Daily intake updated for the shared vault." });
+      toast({ title: "Finance Updated", description: "Daily intake synced to the shared ledger." });
+    }
+  };
+
+  const handleDeleteFinance = () => {
+    if (currentDayFinance) {
+      deleteShopTotal(selectedDate);
+      toast({ title: "Report Deleted", description: "Daily intake record removed." });
     }
   };
 
@@ -549,7 +568,7 @@ export default function Dashboard() {
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-primary" 
-                      style={{ width: `${(financialSummary.inHouseRevenue / financialSummary.intake) * 100}%` }}
+                      style={{ width: `${(financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100}%` }}
                     />
                   </div>
                   
@@ -560,7 +579,7 @@ export default function Dashboard() {
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-slate-300" 
-                      style={{ width: `${(financialSummary.sellerGross / financialSummary.intake) * 100}%` }}
+                      style={{ width: `${(financialSummary.sellerGross / (financialSummary.intake || 1)) * 100}%` }}
                     />
                   </div>
 
@@ -603,9 +622,18 @@ export default function Dashboard() {
                   <Input type="number" placeholder="0.00" value={financeCard} onChange={(e) => setFinanceCard(e.target.value)} className="h-12 rounded-xl font-black" />
                 </div>
               </div>
-              <Button onClick={handleSaveFinance} className="w-full h-12 rounded-xl font-black uppercase text-xs">Sync Daily Intake</Button>
+              <div className="flex gap-4">
+                <Button onClick={handleSaveFinance} className="flex-1 h-12 rounded-xl font-black uppercase text-xs">
+                  {currentDayFinance ? 'Update Report' : 'Sync Daily Intake'}
+                </Button>
+                {currentDayFinance && (
+                  <Button variant="outline" onClick={handleDeleteFinance} className="h-12 w-12 rounded-xl text-destructive hover:bg-destructive/5 border-destructive/20">
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                )}
+              </div>
               {currentDayFinance && (
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center">
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center relative group">
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Recorded Intake</p>
                   <p className="text-3xl font-black text-primary">£{currentDayFinance.totalIntake.toFixed(2)}</p>
                 </div>

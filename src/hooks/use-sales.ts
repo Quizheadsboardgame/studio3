@@ -58,7 +58,6 @@ export function useSales(profileId: string) {
   const db = useFirestore();
 
   // Sellers and Sales are generally shared between staff and finance to allow tracking
-  // We use 'staff' as the source of truth for sellers if we are in staff or finance mode
   const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : profileId);
 
   const sellersRef = useMemoFirebase(() => {
@@ -71,7 +70,6 @@ export function useSales(profileId: string) {
     return collection(db, "profiles", effectiveProfile, "sales");
   }, [db, user, effectiveProfile]);
 
-  // Managers need to see sales from the 'staff' profile too to calculate P&L
   const staffSalesRef = useMemoFirebase(() => {
     if (!db || !user || effectiveProfile !== 'manager') return null;
     return collection(db, "profiles", "staff", "sales");
@@ -102,7 +100,6 @@ export function useSales(profileId: string) {
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
   const combinedSalesData = useMemo(() => {
-    // Force commission to 0 if price is negative (Refund logic)
     const normalize = (s: Sale) => ({
       ...s,
       commission: s.price < 0 ? 0 : s.commission
@@ -111,7 +108,6 @@ export function useSales(profileId: string) {
     const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: effectiveProfile }));
     const staff = (staffSalesData || []).map(s => ({ ...normalize(s), profileOrigin: 'staff' }));
     
-    // Combine and remove duplicates based on ID
     const all = [...primary];
     staff.forEach(s => {
       if (!all.find(existing => existing.id === s.id)) all.push(s);
@@ -165,7 +161,6 @@ export function useSales(profileId: string) {
     if (!salesRef) return;
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
-    // Payout logic: if negative price, commission is 0. 
     const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
     
     const docRef = doc(salesRef);
@@ -184,7 +179,6 @@ export function useSales(profileId: string) {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
     if (!targetRef || !saleId) return;
     
-    // Recalculate commission if price changes
     if (updatedFields.price !== undefined) {
       const existingSale = combinedSalesData.find(s => s.id === saleId);
       if (existingSale) {
@@ -227,6 +221,11 @@ export function useSales(profileId: string) {
     }, { merge: true });
   }, [shopTotalsRef]);
 
+  const deleteShopTotal = useCallback((date: string) => {
+    if (!shopTotalsRef) return;
+    deleteDocumentNonBlocking(doc(shopTotalsRef, date));
+  }, [shopTotalsRef]);
+
   const addExpense = useCallback((date: string, description: string, amount: number) => {
     if (!expensesRef) return;
     const docRef = doc(expensesRef);
@@ -257,6 +256,7 @@ export function useSales(profileId: string) {
     deleteSale,
     markSalesAsPaid,
     setShopTotal,
+    deleteShopTotal,
     addExpense,
     deleteExpense
   };
