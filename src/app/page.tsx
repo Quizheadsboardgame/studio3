@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format, addDays, parseISO } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -22,13 +21,11 @@ import {
   Activity,
   CreditCard,
   TrendingUp,
-  Sparkles,
   BarChart3,
   LogOut,
   User,
   KeyRound,
   Eye,
-  EyeOff,
   Archive,
   RefreshCw,
   Clock,
@@ -101,13 +98,11 @@ export default function Dashboard() {
   const [passwordInput, setPasswordInput] = useState("");
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
 
-  // For the 'seller' profile security
   const [selectedSellerId, setSelectedSellerId] = useState<string>("");
   const [isSellerPasswordDialogOpen, setIsSellerPasswordDialogOpen] = useState(false);
   const [sellerPasswordInput, setSellerPasswordInput] = useState("");
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
 
-  // Manager Seller Editing
   const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
   const [editSellerName, setEditSellerName] = useState("");
   const [editSellerComm, setEditSellerComm] = useState("");
@@ -133,7 +128,6 @@ export default function Dashboard() {
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     
-    // Restore manager session on mount
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
@@ -147,7 +141,6 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, auth]);
 
-  // Use only active sellers for dropdowns unless specifically managing archived
   const activeSellers = useMemo(() => sellers.filter(s => !s.archived), [sellers]);
   const archivedSellers = useMemo(() => sellers.filter(s => s.archived), [sellers]);
 
@@ -163,7 +156,6 @@ export default function Dashboard() {
     return Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || ''));
   }, [dailySalesData]);
 
-  // Specific data for the individual seller view
   const sellerDailySales = useMemo(() => {
     if (profileId !== 'seller' || !authenticatedSellerId) return [];
     return dailySalesData[authenticatedSellerId] || [];
@@ -219,41 +211,47 @@ export default function Dashboard() {
     return { totalSales, totalCommission, totalCards, topSellerName };
   }, [activeSellers, dailySalesData]);
 
-  // Payout Forecast for Manager
   const payoutForecast = useMemo(() => {
     if (profileId !== 'manager') return null;
 
-    const breakdown: Record<string, { sellerName: string, totalPending: number, cardCount: number }> = {};
-    let totalGlobalPending = 0;
+    const today = startOfDay(new Date());
+    const thisFridayDate = startOfDay(nextFriday(today));
+    const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
 
-    // Iterate through all sales across all dates
+    const forecast = {
+      thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, number> },
+      nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, number> },
+      totalGlobalPending: 0
+    };
+
     Object.keys(sales).forEach(date => {
       const dayData = sales[date];
+      const saleDateObj = parseISO(date);
+      const maturityDate = startOfDay(addDays(saleDateObj, 13));
+
       Object.keys(dayData).forEach(sellerId => {
         const sellerSales = dayData[sellerId];
         const seller = sellers.find(s => s.id === sellerId);
-        
-        if (!breakdown[sellerId]) {
-          breakdown[sellerId] = { 
-            sellerName: seller?.name || sellerId, 
-            totalPending: 0, 
-            cardCount: 0 
-          };
-        }
+        const sellerName = seller?.name || sellerId;
 
         sellerSales.forEach(sale => {
           const net = sale.price - (sale.commission || 0);
-          breakdown[sellerId].totalPending += net;
-          breakdown[sellerId].cardCount += 1;
-          totalGlobalPending += net;
+          forecast.totalGlobalPending += net;
+
+          if (!isAfter(maturityDate, thisFridayDate)) {
+            forecast.thisFriday.total += net;
+            forecast.thisFriday.count += 1;
+            forecast.thisFriday.sellers[sellerName] = (forecast.thisFriday.sellers[sellerName] || 0) + net;
+          } else if (!isAfter(maturityDate, nextFridayDate)) {
+            forecast.nextFriday.total += net;
+            forecast.nextFriday.count += 1;
+            forecast.nextFriday.sellers[sellerName] = (forecast.nextFriday.sellers[sellerName] || 0) + net;
+          }
         });
       });
     });
 
-    return {
-      totalGlobalPending,
-      sellers: Object.values(breakdown).sort((a, b) => b.totalPending - a.totalPending)
-    };
+    return forecast;
   }, [sales, sellers, profileId]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
@@ -580,7 +578,7 @@ export default function Dashboard() {
                         </div>
                         <span className="text-[9px] font-bold text-muted-foreground uppercase">{s.defaultCommission}% Commission</span>
                       </div>
-                      <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <Settings2 className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   ))}
                   {(showArchived ? archivedSellers : activeSellers).length === 0 && (
@@ -643,47 +641,71 @@ export default function Dashboard() {
       )}
 
       {profileId === 'manager' && payoutForecast && (
-        <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card animate-in slide-in-from-bottom-6 duration-1000">
-           <CardHeader className="border-b bg-muted/20 px-8 py-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-emerald-100 p-2 rounded-xl">
-                    <ArrowRightLeft className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-black">Global Payout Forecast</CardTitle>
-                    <p className="text-xs text-muted-foreground font-medium">Tracking 13-day settlement obligations for all entities</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">Total Future Liabilities</p>
-                  <span className="text-2xl font-black text-emerald-600">£{payoutForecast.totalGlobalPending.toFixed(2)}</span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {payoutForecast.sellers.map((s, i) => (
-                  <div key={i} className="flex flex-col p-5 rounded-2xl bg-muted/20 border border-black/5 hover:bg-white hover:shadow-xl transition-all duration-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-black text-xs uppercase tracking-tight">{s.sellerName}</span>
-                      <Badge variant="outline" className="text-[8px] font-black uppercase h-5 bg-emerald-50 text-emerald-700 border-emerald-200">Pending</Badge>
-                    </div>
-                    <div className="flex items-end justify-between">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-6 duration-1000">
+           <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card border-l-4 border-l-emerald-500">
+             <CardHeader className="bg-muted/10 px-6 py-4 border-b">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className="bg-emerald-100 p-2 rounded-xl">
+                        <ArrowRightLeft className="w-4 h-4 text-emerald-600" />
+                      </div>
                       <div>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Upcoming Payout</p>
-                        <span className="text-2xl font-black text-emerald-600">£{s.totalPending.toFixed(2)}</span>
+                        <CardTitle className="text-lg font-black">This Friday's Payout</CardTitle>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[9px] font-bold text-muted-foreground uppercase">Volume</p>
-                        <span className="text-xs font-black">{s.cardCount} Cards</span>
+                   </div>
+                   <div className="text-right">
+                      <span className="text-2xl font-black text-emerald-600">£{payoutForecast.thisFriday.total.toFixed(2)}</span>
+                   </div>
+                </div>
+             </CardHeader>
+             <CardContent className="p-6">
+                <div className="space-y-3">
+                   {Object.entries(payoutForecast.thisFriday.sellers).map(([name, amount], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                        <span className="font-bold text-muted-foreground">{name}</span>
+                        <span className="font-black">£{amount.toFixed(2)}</span>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-        </Card>
+                   ))}
+                   {payoutForecast.thisFriday.count === 0 && (
+                     <p className="text-center text-[10px] italic text-muted-foreground py-4">No settlements due this Friday</p>
+                   )}
+                </div>
+             </CardContent>
+           </Card>
+
+           <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card border-l-4 border-l-blue-500">
+             <CardHeader className="bg-muted/10 px-6 py-4 border-b">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className="bg-blue-100 p-2 rounded-xl">
+                        <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-black">Next Friday's Payout</CardTitle>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p>
+                      </div>
+                   </div>
+                   <div className="text-right">
+                      <span className="text-2xl font-black text-blue-600">£{payoutForecast.nextFriday.total.toFixed(2)}</span>
+                   </div>
+                </div>
+             </CardHeader>
+             <CardContent className="p-6">
+                <div className="space-y-3">
+                   {Object.entries(payoutForecast.nextFriday.sellers).map(([name, amount], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                        <span className="font-bold text-muted-foreground">{name}</span>
+                        <span className="font-black">£{amount.toFixed(2)}</span>
+                      </div>
+                   ))}
+                   {payoutForecast.nextFriday.count === 0 && (
+                     <p className="text-center text-[10px] italic text-muted-foreground py-4">No settlements due next Friday</p>
+                   )}
+                </div>
+             </CardContent>
+           </Card>
+        </div>
       )}
 
       <Card className="shadow-2xl border-none overflow-hidden rounded-2xl ring-1 ring-black/5 animate-in slide-in-from-bottom-8 duration-1000">
@@ -921,11 +943,11 @@ export default function Dashboard() {
               </div>
               <ScrollArea className="max-w-full">
                 <TabsList className="bg-muted/50 p-1 mb-2 h-14 rounded-xl">
-                  <TabsTrigger value="all" className="px-8 h-12 data-[state=active]:bg-card data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px] gap-2">
+                  <TabsTrigger value="all" className="px-8 h-12 data-[state=active]:bg-background data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px] gap-2">
                     <Users className="w-4 h-4" /> Global View
                   </TabsTrigger>
                   {activeSellers.map((s) => (
-                    <TabsTrigger key={s.id} value={s.id} className="px-8 h-12 data-[state=active]:bg-card data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px]">
+                    <TabsTrigger key={s.id} value={s.id} className="px-8 h-12 data-[state=active]:bg-background data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px]">
                       {s.name}
                     </TabsTrigger>
                   ))}
@@ -1259,7 +1281,6 @@ export default function Dashboard() {
         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">&copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Enterprise Shared Vault v2.5</p>
       </footer>
 
-      {/* Manager Authentication Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
@@ -1289,7 +1310,6 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Seller Authentication Dialog */}
       <Dialog open={isSellerPasswordDialogOpen} onOpenChange={setIsSellerPasswordDialogOpen}>
         <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
@@ -1322,7 +1342,6 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Seller Edit Dialog */}
       <Dialog open={!!editingSeller} onOpenChange={() => setEditingSeller(null)}>
         <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
