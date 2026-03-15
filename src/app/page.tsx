@@ -141,6 +141,7 @@ export default function Dashboard() {
   const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
   const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
 
+  // Finance Inputs
   const [financeCash, setFinanceCash] = useState("");
   const [financeCard, setFinanceCard] = useState("");
   const [expenseDesc, setExpenseDesc] = useState("");
@@ -173,6 +174,7 @@ export default function Dashboard() {
   const allDailySales = useMemo(() => Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || '')), [dailySalesData]);
   const sellerDailySales = useMemo(() => (profileId !== 'seller' || !authenticatedSellerId) ? [] : dailySalesData[authenticatedSellerId] || [], [profileId, authenticatedSellerId, dailySalesData]);
 
+  // Finance calculations
   const currentDayFinance = useMemo(() => shopTotals.find(t => t.date === selectedDate), [shopTotals, selectedDate]);
   const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
 
@@ -209,13 +211,28 @@ export default function Dashboard() {
     return { totalSales, totalCommission, totalCards, topSellerName };
   }, [activeSellers, dailySalesData]);
 
+  // True P&L Logic
   const profitLoss = useMemo(() => {
     if (profileId !== 'manager') return null;
+    
+    // Seller Liability = Money we collected that belongs to sellers (Net payout)
     const sellerPayouts = allDailySales.reduce((acc, s) => acc + (s.price - (s.commission || 0)), 0);
+    
+    // Total Shop Intake = Recorded from finance profile (Total cash/card in till)
     const shopIntake = currentDayFinance?.totalIntake || 0;
+    
+    // Expenses
     const totalExpenses = currentDayExpenses.reduce((acc, e) => acc + e.amount, 0);
+    
+    // Net Shop Profit = Total Intake - What we owe sellers - expenses
     const netProfit = shopIntake - sellerPayouts - totalExpenses;
-    return { intake: shopIntake, payoutLiability: sellerPayouts, expenses: totalExpenses, net: netProfit };
+
+    return {
+      intake: shopIntake,
+      payoutLiability: sellerPayouts,
+      expenses: totalExpenses,
+      net: netProfit
+    };
   }, [profileId, allDailySales, currentDayFinance, currentDayExpenses]);
 
   const payoutForecast = useMemo(() => {
@@ -223,6 +240,7 @@ export default function Dashboard() {
     const today = startOfDay(new Date());
     const thisFridayDate = startOfDay(nextFriday(today));
     const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
+
     const forecast = {
       thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> },
       nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> }
@@ -252,6 +270,7 @@ export default function Dashboard() {
         forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
       }
     });
+
     return forecast;
   }, [combinedSalesData, sellers, profileId]);
 
@@ -367,33 +386,54 @@ export default function Dashboard() {
     if (!authenticatedSellerId) return;
     const seller = sellers.find(s => s.id === authenticatedSellerId);
     if (!seller) return;
+
     const doc = new jsPDF();
+    
+    // Generate sequential invoice number based on history
     const uniqueEvents = Array.from(new Set(combinedSalesData.map(s => `${s.sellerId}_${s.saleDate}`))).sort();
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
+    // Branding - Strict Monochrome
     doc.setFontSize(22);
     doc.text("Newton's Collectables", 14, 20);
+    
     doc.setFontSize(10);
     doc.text(`INVOICE #${invoiceNum}`, 196, 20, { align: 'right' });
+    
     doc.line(14, 33, 196, 33);
+    
     doc.text(`Seller: ${seller.name}`, 14, 43);
     doc.text(`Report Date: ${selectedDate}`, 14, 48);
 
     autoTable(doc, {
       startY: 63,
       head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
-      body: sellerDailySales.map(sale => [sale.cardName, `£${sale.price.toFixed(2)}`, sale.payoutStatus || 'Pending', `£${(sale.price - (sale.commission || 0)).toFixed(2)}`]),
+      body: sellerDailySales.map(sale => [
+        sale.cardName, 
+        `£${sale.price.toFixed(2)}`, 
+        sale.payoutStatus || 'Pending',
+        `£${(sale.price - (sale.commission || 0)).toFixed(2)}`
+      ]),
       theme: 'grid',
-      headStyles: { fillColor: [0, 0, 0] }
+      headStyles: { fillColor: [0, 0, 0] },
+      margin: { top: 60 }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    // Summary Box
     doc.rect(120, finalY, 76, 35);
     doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 12);
     doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 18);
+    doc.setFont(undefined, 'bold');
     doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 28);
+    
+    // Legal Footer
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
     doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
+
     doc.save(`NC_Invoice_${invoiceNum}.pdf`);
   };
 
@@ -430,38 +470,66 @@ export default function Dashboard() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
           <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 h-11 shadow-sm">
             <CalendarIcon className="w-4 h-4 text-primary" />
-            <input type="date" className="bg-transparent outline-none text-sm font-bold uppercase text-slate-700" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+            <input 
+              type="date" 
+              className="bg-transparent outline-none text-sm font-bold uppercase text-slate-700"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
           </div>
         </div>
       </header>
 
+      {/* P&L Overview (Manager Only) */}
       {profileId === 'manager' && profitLoss && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700">
           <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
-            <CardHeader className="p-5 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
-            <CardContent className="p-5 pt-0"><div className="text-2xl font-black">£{profitLoss.intake.toFixed(2)}</div></CardContent>
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-2xl font-black">£{profitLoss.intake.toFixed(2)}</div>
+            </CardContent>
           </Card>
           <Card className="border-none shadow-sm rounded-2xl bg-white">
-            <CardHeader className="p-5 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Seller Liabilities</CardTitle></CardHeader>
-            <CardContent className="p-5 pt-0"><div className="text-2xl font-black text-destructive">£{profitLoss.payoutLiability.toFixed(2)}</div></CardContent>
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Seller Liabilities</CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-2xl font-black text-destructive">£{profitLoss.payoutLiability.toFixed(2)}</div>
+            </CardContent>
           </Card>
           <Card className="border-none shadow-sm rounded-2xl bg-white">
-            <CardHeader className="p-5 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Shop Expenses</CardTitle></CardHeader>
-            <CardContent className="p-5 pt-0"><div className="text-2xl font-black text-slate-600">£{profitLoss.expenses.toFixed(2)}</div></CardContent>
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Shop Expenses</CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-2xl font-black text-slate-600">£{profitLoss.expenses.toFixed(2)}</div>
+            </CardContent>
           </Card>
           <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-green-500">
-            <CardHeader className="p-5 pb-2"><CardTitle className="text-[10px] font-black uppercase text-green-500">Net Shop Profit</CardTitle></CardHeader>
-            <CardContent className="p-5 pt-0"><div className="text-2xl font-black text-green-600">£{profitLoss.net.toFixed(2)}</div></CardContent>
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-[10px] font-black uppercase text-green-500">Net Shop Profit</CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-2xl font-black text-green-600">£{profitLoss.net.toFixed(2)}</div>
+            </CardContent>
           </Card>
         </div>
       )}
 
+      {/* Finance Portal (Staff/Finance) */}
       {profileId === 'finance' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-1000">
           <Card className="shadow-sm border-none rounded-2xl bg-white">
-            <CardHeader className="border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase flex items-center gap-2"><Calculator className="w-4 h-4 text-primary" /> Daily Intake Entry</CardTitle></CardHeader>
+            <CardHeader className="border-b bg-slate-50/20">
+              <CardTitle className="text-sm font-black uppercase flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-primary" /> Daily Intake Entry
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -482,8 +550,13 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
           <Card className="shadow-sm border-none rounded-2xl bg-white">
-            <CardHeader className="border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase flex items-center gap-2"><Receipt className="w-4 h-4 text-primary" /> Shop Expenses</CardTitle></CardHeader>
+            <CardHeader className="border-b bg-slate-50/20">
+              <CardTitle className="text-sm font-black uppercase flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-primary" /> Shop Expenses
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input placeholder="Description..." value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="h-12 rounded-xl font-bold" />
@@ -509,10 +582,14 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Sales Entry (Staff Profile) */}
       {profileId === 'staff' && (
         <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white">
           <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3"><History className="w-5 h-5 text-primary" /><CardTitle className="text-xl font-black uppercase">Sales Ledger</CardTitle></div>
+            <div className="flex items-center gap-3">
+              <History className="w-5 h-5 text-primary" />
+              <CardTitle className="text-xl font-black uppercase">Sales Ledger</CardTitle>
+            </div>
             <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
           </CardHeader>
           <CardContent className="p-8 space-y-8">
@@ -520,27 +597,77 @@ export default function Dashboard() {
               <div className="md:col-span-3 space-y-3">
                 <label className="text-[10px] font-black uppercase text-slate-400">Seller Entity</label>
                 <Select value={entrySellerId} onValueChange={setEntrySellerId}>
-                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm"><SelectValue placeholder="Select seller" /></SelectTrigger>
-                  <SelectContent className="rounded-xl">{activeSellers.map((s) => (<SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>))}</SelectContent>
+                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm">
+                    <SelectValue placeholder="Select seller" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {activeSellers.map((s) => (
+                      <SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="md:col-span-5 space-y-3">
                 <label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label>
-                <Input placeholder="e.g., Rare Holographic Charizard" className="bg-white h-12 rounded-xl px-4 font-bold" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} />
+                <Input 
+                  placeholder="e.g., Rare Holographic Charizard" 
+                  className="bg-white h-12 rounded-xl px-4 font-bold"
+                  value={newSaleCard}
+                  onChange={(e) => setNewSaleCard(e.target.value)}
+                />
               </div>
               <div className="md:col-span-2 space-y-3">
                 <label className="text-[10px] font-black uppercase text-slate-400">Price</label>
-                <div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="bg-white h-12 rounded-xl pl-8 font-black" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
+                  <Input 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0.00" 
+                    className="bg-white h-12 rounded-xl pl-8 font-black"
+                    value={newSalePrice}
+                    onChange={(e) => setNewSalePrice(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="md:col-span-2"><Button className="w-full h-12 rounded-xl font-black uppercase text-xs" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Sale</Button></div>
+              <div className="md:col-span-2">
+                <Button 
+                  className="w-full h-12 rounded-xl font-black uppercase text-xs"
+                  onClick={handleAddSale}
+                  disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}
+                >
+                  Log Sale
+                </Button>
+              </div>
             </div>
+
             <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
               <Table>
-                <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead><TableHead className="font-black uppercase text-[10px] h-14">Card Detail</TableHead><TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Sale Amount</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-slate-50/50">
+                  <TableRow>
+                    <TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] h-14">Card Detail</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Sale Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {allDailySales.length > 0 ? allDailySales.map((sale) => (
-                    <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16"><TableCell className="pl-6"><Badge variant="outline" className="font-black text-[10px] uppercase bg-white">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell><TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell><TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell></TableRow>
-                  )) : <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell></TableRow>}
+                  {allDailySales.length > 0 ? (
+                    allDailySales.map((sale) => (
+                      <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
+                        <TableCell className="pl-6">
+                          <Badge variant="outline" className="font-black text-[10px] uppercase bg-white">
+                            {sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
+                        <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -548,50 +675,202 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Payout Forecasting (Manager Only) */}
       {profileId === 'manager' && payoutForecast && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-6 duration-1000">
-           {[ { batch: payoutForecast.thisFriday, title: "This Friday", icon: ArrowRightLeft, color: "primary" }, { batch: payoutForecast.nextFriday, title: "Next Friday", icon: Clock, color: "slate-200" } ].map((item, idx) => (
+           {[
+             { batch: payoutForecast.thisFriday, title: "This Friday", icon: ArrowRightLeft, color: "primary" },
+             { batch: payoutForecast.nextFriday, title: "Next Friday", icon: Clock, color: "slate-200" }
+           ].map((item, idx) => (
              <Card key={idx} className={`shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-${item.color}`}>
                <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="bg-primary text-white p-2 rounded-xl"><item.icon className="w-4 h-4" /></div>
-                    <div><CardTitle className="text-lg font-black uppercase">{item.title}</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(item.batch.date, "PPP")}</p></div>
+                    <div>
+                      <CardTitle className="text-lg font-black uppercase">{item.title}</CardTitle>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(item.batch.date, "PPP")}</p>
+                    </div>
                   </div>
-                  <div className="text-right"><span className="text-2xl font-black">£{item.batch.total.toFixed(2)}</span></div>
+                  <div className="text-right">
+                    <span className="text-2xl font-black">£{item.batch.total.toFixed(2)}</span>
+                  </div>
                </CardHeader>
                <CardContent className="p-6 space-y-3">
                   {Object.entries(item.batch.sellers).map(([name, data], i) => (
                     <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all">
                       <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
-                      <div className="flex items-center gap-3"><span className="font-black text-slate-900">£{data.total.toFixed(2)}</span><Button size="sm" className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => { setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total }); setIsSettlementDialogOpen(true); }}>Settle</Button></div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
+                        <Button 
+                          size="sm" 
+                          className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => {
+                            setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
+                            setIsSettlementDialogOpen(true);
+                          }}
+                        >
+                          Settle
+                        </Button>
+                      </div>
                     </div>
                   ))}
-                  {item.batch.count === 0 && <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>}
+                  {item.batch.count === 0 && (
+                    <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>
+                  )}
                </CardContent>
              </Card>
            ))}
         </div>
       )}
 
+      {/* Personal Seller Portal */}
+      {profileId === 'seller' && (
+        <div className="space-y-8 animate-in zoom-in-95 duration-700">
+          <div className="flex flex-col md:flex-row gap-6 items-center">
+            <Card className="w-full md:w-1/3 shadow-sm border-none rounded-3xl overflow-hidden bg-white">
+               <CardHeader className="p-8 pb-4">
+                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Entity Selection</CardTitle>
+               </CardHeader>
+               <CardContent className="p-8 pt-0 space-y-6">
+                  <Select value={selectedSellerId} onValueChange={handleSellerSelect}>
+                    <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50">
+                      <SelectValue placeholder="WHICH SELLER?" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                      {activeSellers.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="font-bold py-4 uppercase text-xs">{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {authenticatedSellerId && (
+                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px]">
+                      <Download className="w-4 h-4" /> Export Report (PDF)
+                    </Button>
+                  )}
+               </CardContent>
+            </Card>
+
+            {authenticatedSellerId && (
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                <Card className="shadow-sm border-none rounded-3xl bg-white group hover:shadow-xl transition-all duration-500">
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Gross Sales</CardTitle></CardHeader>
+                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter">£{sellerStats.total.toFixed(2)}</div></CardContent>
+                </Card>
+                <Card className="shadow-sm border-none rounded-3xl bg-white">
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader>
+                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-destructive">£{sellerStats.commission.toFixed(2)}</div></CardContent>
+                </Card>
+                <Card className="shadow-sm border-none rounded-3xl bg-primary text-white">
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout</CardTitle></CardHeader>
+                  <CardContent className="p-6 pt-0">
+                    <div className="text-4xl font-black tracking-tighter">£{sellerStats.payout.toFixed(2)}</div>
+                    <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50">
+                      <Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+
+          {authenticatedSellerId && (
+            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+               <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase">Transaction Itemization</CardTitle></CardHeader>
+               <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead><TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Net</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                       {sellerDailySales.map((sale) => (
+                         <TableRow key={sale.id} className="h-16 hover:bg-slate-50/30">
+                           <TableCell className="pl-8 font-bold uppercase text-xs">{sale.cardName}</TableCell>
+                           <TableCell className="font-bold">£{sale.price.toFixed(2)}</TableCell>
+                           <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
+                           <TableCell className="text-right pr-8 font-black text-primary">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+                         </TableRow>
+                       ))}
+                       {sellerDailySales.length === 0 && <TableRow><TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
+                    </TableBody>
+                  </Table>
+               </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Global Branding Footer */}
       <footer className="py-12 border-t mt-12 bg-slate-50/50 rounded-t-3xl text-center space-y-4">
-        <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">{LEGAL_STATEMENT}</p>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">&copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard</p>
+        <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">
+          {LEGAL_STATEMENT}
+        </p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+          &copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard
+        </p>
       </footer>
 
+      {/* Auth & Management Dialogs */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
-          <DialogHeader className="items-center text-center"><div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Lock className="w-8 h-8" /></div><DialogTitle className="text-2xl font-black uppercase">Access Locked</DialogTitle></DialogHeader>
-          <div className="py-6"><Input type="password" placeholder="ENCRYPTION KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} /></div>
-          <DialogFooter className="flex-col gap-3"><Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs">Unlock Vault</Button></DialogFooter>
+          <DialogHeader className="items-center text-center">
+            <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Lock className="w-8 h-8" /></div>
+            <DialogTitle className="text-2xl font-black uppercase">Access Locked</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <Input 
+              type="password" 
+              placeholder="ENCRYPTION KEY..." 
+              className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
+            />
+          </div>
+          <DialogFooter className="flex-col gap-3">
+            <Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs">Unlock Vault</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSellerPasswordDialogOpen} onOpenChange={setIsSellerPasswordDialogOpen}>
+        <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center">
+            <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><KeyRound className="w-8 h-8" /></div>
+            <DialogTitle className="text-2xl font-black uppercase">Identity Verification</DialogTitle>
+          </DialogHeader>
+          <div className="py-6">
+            <Input 
+              type="password" 
+              placeholder="ENTER PERSONAL KEY..." 
+              className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl"
+              value={sellerPasswordInput}
+              onChange={(e) => setSellerPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSellerPasswordSubmit()}
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs">Authorize Access</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isSettlementDialogOpen} onOpenChange={setIsSettlementDialogOpen}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
-          <DialogHeader className="items-center text-center"><div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Wallet className="w-8 h-8" /></div><DialogTitle className="text-2xl font-black uppercase">Settle Payout</DialogTitle><DialogDescription className="text-slate-500 font-bold">Pay £{settlementBatch?.total.toFixed(2)} to {settlementBatch?.sellerId}.</DialogDescription></DialogHeader>
+          <DialogHeader className="items-center text-center">
+            <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Wallet className="w-8 h-8" /></div>
+            <DialogTitle className="text-2xl font-black uppercase">Settle Payout</DialogTitle>
+            <DialogDescription className="text-slate-500 font-bold">
+              Confirm settlement of £{settlementBatch?.total.toFixed(2)} to {settlementBatch?.sellerId}. 
+              This will mark all associated cards as paid.
+            </DialogDescription>
+          </DialogHeader>
           <div className="py-8 grid grid-cols-2 gap-4">
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('cash')}><Banknote className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Cash</span></Button>
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('transfer')}><Send className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Transfer</span></Button>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('cash')}>
+               <Banknote className="w-6 h-6" />
+               <span className="font-black uppercase text-[10px]">Cash</span>
+             </Button>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('transfer')}>
+               <Send className="w-6 h-6" />
+               <span className="font-black uppercase text-[10px]">Transfer</span>
+             </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -5,6 +5,7 @@ import { useMemo, useCallback } from "react";
 import { 
   collection, 
   doc, 
+  serverTimestamp 
 } from "firebase/firestore";
 import { 
   useFirestore, 
@@ -56,25 +57,30 @@ export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
+  // Sellers and Sales are generally shared between staff and finance to allow tracking
+  // We use 'staff' as the source of truth for sellers if we are in staff or finance mode
+  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : profileId);
+
   const sellersRef = useMemoFirebase(() => {
-    if (!db || !profileId || !user) return null;
-    return collection(db, "profiles", profileId, "sellers");
-  }, [db, profileId, user]);
+    if (!db || !user) return null;
+    return collection(db, "profiles", effectiveProfile, "sellers");
+  }, [db, user, effectiveProfile]);
 
   const salesRef = useMemoFirebase(() => {
-    if (!db || !profileId || !user) return null;
-    return collection(db, "profiles", profileId, "sales");
-  }, [db, profileId, user]);
+    if (!db || !user) return null;
+    return collection(db, "profiles", effectiveProfile, "sales");
+  }, [db, user, effectiveProfile]);
 
+  // Managers need to see sales from the 'staff' profile too to calculate P&L
   const staffSalesRef = useMemoFirebase(() => {
-    if (!db || !user || profileId !== 'manager') return null;
+    if (!db || !user || effectiveProfile !== 'manager') return null;
     return collection(db, "profiles", "staff", "sales");
-  }, [db, user, profileId]);
+  }, [db, user, effectiveProfile]);
 
   const staffSellersRef = useMemoFirebase(() => {
-    if (!db || !user || profileId !== 'manager') return null;
+    if (!db || !user || effectiveProfile !== 'manager') return null;
     return collection(db, "profiles", "staff", "sellers");
-  }, [db, user, profileId]);
+  }, [db, user, effectiveProfile]);
 
   const shopTotalsRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -93,27 +99,35 @@ export function useSales(profileId: string) {
   const { data: shopTotalsData } = useCollection<ShopTotal>(shopTotalsRef);
   const { data: expensesData } = useCollection<Expense>(expensesRef);
 
-  const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || profileId !== 'manager') && !!user;
+  const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
   const combinedSalesData = useMemo(() => {
+    // Force commission to 0 if price is negative (Refund logic)
     const normalize = (s: Sale) => ({
       ...s,
       commission: s.price < 0 ? 0 : s.commission
     });
-    const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: profileId }));
+    
+    const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: effectiveProfile }));
     const staff = (staffSalesData || []).map(s => ({ ...normalize(s), profileOrigin: 'staff' }));
-    return [...primary, ...staff];
-  }, [primarySalesData, staffSalesData, profileId]);
+    
+    // Combine and remove duplicates based on ID
+    const all = [...primary];
+    staff.forEach(s => {
+      if (!all.find(existing => existing.id === s.id)) all.push(s);
+    });
+    return all;
+  }, [primarySalesData, staffSalesData, effectiveProfile]);
 
   const sellers = useMemo(() => {
     const primary = sellersData || [];
-    const staff = profileId === 'manager' ? (staffSellersData || []) : [];
+    const staff = effectiveProfile === 'manager' ? (staffSellersData || []) : [];
     const all = [...primary];
     staff.forEach(s => {
       if (!all.find(existing => existing.id === s.id)) all.push(s);
     });
     return all.sort((a, b) => a.name.localeCompare(b.name));
-  }, [sellersData, staffSellersData, profileId]);
+  }, [sellersData, staffSellersData, effectiveProfile]);
 
   const salesByDate = useMemo(() => {
     const result: Record<string, Record<string, Sale[]>> = {};
@@ -126,7 +140,7 @@ export function useSales(profileId: string) {
   }, [combinedSalesData]);
 
   const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
-    const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
+    const targetRef = (effectiveProfile === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!name || !targetRef) return;
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
     const docRef = doc(targetRef, sellerId);
@@ -138,20 +152,22 @@ export function useSales(profileId: string) {
       password: randomPassword,
       archived: false
     }, { merge: true });
-  }, [sellersRef, staffSellersRef, profileId]);
+  }, [sellersRef, staffSellersRef, effectiveProfile]);
 
   const updateSeller = useCallback((sellerId: string, updatedFields: Partial<Seller>) => {
-    const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
+    const targetRef = (effectiveProfile === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!sellerId || !targetRef) return;
     const docRef = doc(targetRef, sellerId);
     updateDocumentNonBlocking(docRef, updatedFields);
-  }, [sellersRef, staffSellersRef, profileId]);
+  }, [sellersRef, staffSellersRef, effectiveProfile]);
 
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
+    // Payout logic: if negative price, commission is 0. 
     const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
+    
     const docRef = doc(salesRef);
     setDocumentNonBlocking(docRef, {
       id: docRef.id,
@@ -167,6 +183,8 @@ export function useSales(profileId: string) {
   const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>, origin?: string) => {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
     if (!targetRef || !saleId) return;
+    
+    // Recalculate commission if price changes
     if (updatedFields.price !== undefined) {
       const existingSale = combinedSalesData.find(s => s.id === saleId);
       if (existingSale) {
@@ -175,6 +193,7 @@ export function useSales(profileId: string) {
         updatedFields.commission = updatedFields.price < 0 ? 0 : (updatedFields.price * commissionPercentage) / 100;
       }
     }
+    
     const docRef = doc(targetRef, saleId);
     updateDocumentNonBlocking(docRef, updatedFields);
   }, [salesRef, staffSalesRef, sellers, combinedSalesData]);
