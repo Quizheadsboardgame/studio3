@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -6,7 +5,6 @@ import { format } from "date-fns";
 import { 
   Plus, 
   Search, 
-  Download, 
   Trash2, 
   Calendar as CalendarIcon,
   Pencil,
@@ -73,7 +71,6 @@ import {
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 
 type ProfileType = 'manager' | 'staff' | 'seller';
 
@@ -120,9 +117,6 @@ export default function Dashboard() {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editCard, setEditCard] = useState("");
   const [editPrice, setEditPrice] = useState("");
-
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   useEffect(() => {
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
@@ -254,29 +248,6 @@ export default function Dashboard() {
       toast({ title: "Vault Unlocked", description: `Welcome back, ${seller.name}.` });
     } else {
       toast({ variant: "destructive", title: "Access Denied", description: "Incorrect access key." });
-    }
-  };
-
-  const handleGenerateSummary = async () => {
-    setIsGeneratingSummary(true);
-    setAiSummary(null);
-    try {
-      const inputData: Record<string, { card: string, price: number }[]> = {};
-      Object.entries(dailySalesData).forEach(([sellerId, sellerSales]) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        const name = seller ? seller.name : sellerId;
-        inputData[name] = sellerSales.map(s => ({ card: s.cardName, price: s.price }));
-      });
-
-      const result = await generateDailySalesSummary({
-        date: selectedDate,
-        dailySales: inputData
-      });
-      setAiSummary(result.summary);
-    } catch (e) {
-      toast({ variant: "destructive", title: "AI Error", description: "Could not generate daily summary." });
-    } finally {
-      setIsGeneratingSummary(false);
     }
   };
 
@@ -452,39 +423,92 @@ export default function Dashboard() {
             </CardContent>
           </Card>
           
-          <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-primary/5">
-            <CardHeader className="border-b bg-primary/10">
-              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" /> AI Insights Agent
-              </CardTitle>
+          <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card">
+            <CardHeader className="border-b bg-muted/10">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" /> Seller Credentials
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
+                  onClick={() => setShowSellerPasswords(!showSellerPasswords)}
+                >
+                  {showSellerPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
-              {aiSummary ? (
-                <div className="space-y-4 animate-in slide-in-from-top-2">
-                  <p className="text-sm font-medium leading-relaxed text-foreground/80 bg-white/50 p-6 rounded-2xl ring-1 ring-primary/10 italic">
-                    "{aiSummary}"
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => setAiSummary(null)} className="w-full rounded-xl font-bold uppercase tracking-widest text-[10px]">Clear Insights</Button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
-                  <div className="bg-primary/10 p-4 rounded-3xl">
-                    <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3">
+                  <Input 
+                    placeholder="Entity Name..." 
+                    className="h-10 bg-muted/30 border-none rounded-xl font-bold text-xs"
+                    value={newSellerName}
+                    onChange={(e) => setNewSellerName(e.target.value)}
+                  />
+                  <div className="relative">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-muted-foreground text-[10px]">%</span>
+                    <Input 
+                      type="number"
+                      placeholder="Comm %" 
+                      className="h-10 bg-muted/30 border-none rounded-xl font-black pr-8 text-xs"
+                      value={newSellerCommission}
+                      onChange={(e) => setNewSellerCommission(e.target.value)}
+                    />
                   </div>
-                  <div>
-                    <h4 className="font-black text-sm uppercase tracking-tight">Generate Daily Brief</h4>
-                    <p className="text-[10px] text-muted-foreground font-medium px-4">Our AI agent will analyze today's logs and identify emerging trends & top sellers.</p>
-                  </div>
-                  <Button 
-                    onClick={handleGenerateSummary} 
-                    disabled={isGeneratingSummary || allDailySales.length === 0}
-                    className="rounded-xl px-8 h-12 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-[10px]"
-                  >
-                    {isGeneratingSummary ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                    Generate Insights
-                  </Button>
                 </div>
-              )}
+                <Button 
+                  className="w-full h-10 rounded-xl shadow-lg shadow-primary/10 font-black uppercase tracking-widest text-[10px]"
+                  onClick={() => {
+                    if (newSellerName) {
+                      addSeller(newSellerName, parseFloat(newSellerCommission) || 0);
+                      setNewSellerName("");
+                      setNewSellerCommission("");
+                      toast({ title: "Success", description: "Entity provisioned." });
+                    }
+                  }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Provision Entity
+                </Button>
+              </div>
+
+              <Separator />
+
+              <ScrollArea className="h-[120px] pr-2">
+                <div className="flex flex-col gap-2">
+                  {sellers.map((s) => (
+                    <div 
+                      key={s.id} 
+                      className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-black/5"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-black text-xs">{s.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase">{s.defaultCommission}% Comm.</span>
+                          {showSellerPasswords && (
+                            <Badge variant="outline" className="text-[8px] h-4 font-black bg-primary/5 border-primary/20 text-primary px-1">
+                              KEY: {s.password}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-lg"
+                        onClick={() => removeSeller(s.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                  {sellers.length === 0 && (
+                    <p className="text-[10px] text-center italic text-muted-foreground py-4">No entities provisioned</p>
+                  )}
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
@@ -999,7 +1023,7 @@ export default function Dashboard() {
         <div className="space-y-6">
           <h3 className="text-xl font-black tracking-tight flex items-center gap-3">
             <div className="bg-emerald-100 p-2 rounded-xl"><Coins className="w-5 h-5 text-emerald-600" /></div>
-            NC Shared Vault Analytics ({profileId})
+            Live Vault Activity ({profileId})
           </h3>
 
           <Card className="shadow-2xl border-none h-[400px] rounded-3xl ring-1 ring-black/5 overflow-hidden">
@@ -1089,117 +1113,6 @@ export default function Dashboard() {
                   )}
                 </ScrollArea>
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-2xl border-none rounded-3xl ring-1 ring-black/5 overflow-hidden">
-            <CardHeader className="pb-4 bg-muted/10 border-b">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" /> Active Entity Roster
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {isManagerAuthenticated && (
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
-                      onClick={() => setShowSellerPasswords(!showSellerPasswords)}
-                      title={showSellerPasswords ? "Hide Access Keys" : "Show Access Keys"}
-                    >
-                      {showSellerPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </Button>
-                  )}
-                  {isManagerAuthenticated ? (
-                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-primary/20 bg-primary/5 text-primary py-1 px-3">
-                      <Settings2 className="w-3 h-3" /> Management Mode
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-muted/20 bg-muted/5 text-muted-foreground py-1 px-3">
-                      <Lock className="w-3 h-3" /> Encrypted View
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              {isManagerAuthenticated && (
-                <div className="space-y-4 animate-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input 
-                      placeholder="Entity legal name..." 
-                      className="h-12 bg-muted/30 border-none rounded-xl focus-visible:ring-primary/30 font-bold"
-                      value={newSellerName}
-                      onChange={(e) => setNewSellerName(e.target.value)}
-                    />
-                    <div className="relative">
-                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-muted-foreground text-sm">%</span>
-                       <Input 
-                        type="number"
-                        step="0.01"
-                        placeholder="Commission %..." 
-                        className="h-12 bg-muted/30 border-none rounded-xl focus-visible:ring-primary/30 font-black pr-10"
-                        value={newSellerCommission}
-                        onChange={(e) => setNewSellerCommission(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button 
-                    className="w-full h-12 rounded-xl shadow-lg shadow-primary/20 font-black uppercase tracking-widest text-xs"
-                    onClick={() => {
-                      if (newSellerName) {
-                        addSeller(newSellerName, parseFloat(newSellerCommission) || 0);
-                        setNewSellerName("");
-                        setNewSellerCommission("");
-                        toast({ title: "Success", description: "New entity provisioned with secure access key." });
-                      }
-                    }}
-                  >
-                    <Plus className="w-5 h-5 mr-2 stroke-[3px]" /> Provision Entity
-                  </Button>
-                </div>
-              )}
-              
-              <div className="flex flex-wrap gap-3">
-                {sellers.length > 0 ? (
-                  sellers.map((s) => (
-                    <Badge 
-                      key={s.id} 
-                      variant="secondary" 
-                      className={`pl-5 ${isManagerAuthenticated ? 'pr-2' : 'pr-5'} py-3 flex items-center gap-3 group cursor-default rounded-2xl bg-white border border-black/5 shadow-sm hover:shadow-md transition-all duration-300 ring-1 ring-black/5`}
-                    >
-                      <div className="flex flex-col items-start gap-1">
-                        <span className="font-black text-sm tracking-tight">{s.name}</span>
-                        {isManagerAuthenticated && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">{(s.defaultCommission || 0)}% Commission</span>
-                            {showSellerPasswords && s.password && (
-                              <Badge variant="outline" className="text-[8px] h-4 font-black bg-primary/5 border-primary/20 text-primary px-1">
-                                KEY: {s.password}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {isManagerAuthenticated && (
-                        <button 
-                          onClick={() => {
-                            removeSeller(s.id);
-                            toast({ title: "Removed", description: "Entity de-provisioned from roster." });
-                          }}
-                          className="p-1.5 hover:bg-destructive hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </Badge>
-                  ))
-                ) : (
-                  <div className="w-full text-center py-8">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 italic">Roster initialization required</p>
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>
