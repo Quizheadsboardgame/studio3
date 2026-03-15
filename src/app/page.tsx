@@ -912,7 +912,7 @@ export default function Dashboard() {
                </CardHeader>
                <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
                   <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
-                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-primary'}`}>
+                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-white'}`}>
                     £{(predictedFridayPosition || 0).toFixed(2)}
                   </div>
                   <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
@@ -956,7 +956,7 @@ export default function Dashboard() {
             <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
-                <div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-primary'}`}>
+                <div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-white'}`}>
                   £{(globalAudit.currentLiquidity || 0).toFixed(2)}
                 </div>
               </CardContent>
