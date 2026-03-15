@@ -112,6 +112,14 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+// Theme Definitions for different vaults
+const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
+  manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, // Deep Slate
+  staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   // Blue
+  seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  // Emerald
+  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   // Amber/Gold
+};
+
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
@@ -187,7 +195,6 @@ export default function Dashboard() {
 
   const currentDayFinance = useMemo(() => shopTotals.find(t => t.date === selectedDate), [shopTotals, selectedDate]);
   
-  // Pre-fill finance inputs when date or data changes
   useEffect(() => {
     if (currentDayFinance) {
       setFinanceCash(currentDayFinance.cashIntake.toString());
@@ -247,27 +254,20 @@ export default function Dashboard() {
     };
   }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate]);
 
-  // Global Ledger Tally (All-time P&L)
   const globalAudit = useMemo(() => {
     if (profileId !== 'manager') return null;
 
     const totalIntake = shopTotals.reduce((acc, t) => acc + t.totalIntake, 0);
     const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
     const totalCommission = combinedSalesData.reduce((acc, s) => acc + (s.commission || 0), 0);
-    
-    // Total gross from all sellers ever recorded
     const totalSellerGross = combinedSalesData.reduce((acc, s) => acc + s.price, 0);
-    // In-house revenue is any intake not attributed to seller gross price
     const totalInHouseRevenue = Math.max(0, totalIntake - totalSellerGross);
-    
     const totalPaidSettlements = combinedSalesData.reduce((acc, s) => {
       return s.payoutStatus === 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
     }, 0);
-
     const totalUnpaidLiability = combinedSalesData.reduce((acc, s) => {
       return s.payoutStatus !== 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
     }, 0);
-
     const netProfit = totalInHouseRevenue + totalCommission - totalExpenses;
     const currentLiquidity = totalIntake - totalExpenses - totalPaidSettlements;
 
@@ -486,8 +486,16 @@ export default function Dashboard() {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>;
   }
 
+  const theme = THEMES[profileId];
+
   return (
-    <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto transition-all duration-500 animate-in fade-in">
+    <div 
+      className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto transition-all duration-700 animate-in fade-in"
+      style={{
+        '--primary': theme.primary,
+        '--ring': theme.ring,
+      } as React.CSSProperties}
+    >
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex flex-col">
           <h1 className="text-3xl font-black tracking-tighter text-slate-900 flex items-center gap-2">
@@ -498,19 +506,25 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-xl gap-2 shadow-sm h-11 px-6">
-                <span className="font-bold uppercase tracking-widest text-xs">Vault: {profileId}</span>
+              <Button variant="outline" className="rounded-xl gap-2 shadow-sm h-11 px-6 border-primary/20">
+                <span className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
+                  {profileId === 'manager' && <ShieldCheck className="w-4 h-4 text-primary" />}
+                  {profileId === 'staff' && <UserCircle className="w-4 h-4 text-primary" />}
+                  {profileId === 'seller' && <User className="w-4 h-4 text-primary" />}
+                  {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
+                  VAULT: {profileId}
+                </span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2">
-              <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3"><ShieldCheck className="w-5 h-5" /> MANAGER</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3"><UserCircle className="w-5 h-5" /> STAFF</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3"><User className="w-5 h-5" /> SELLER</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3"><Receipt className="w-5 h-5" /> FINANCE</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 border-primary/10 shadow-xl">
+              <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MANAGER</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3 font-bold"><Receipt className="w-5 h-5 text-amber-600" /> FINANCE</DropdownMenuItem>
               {isManagerAuthenticated && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="gap-3 py-3 text-destructive"><LogOut className="w-5 h-5" /> EXIT</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} className="gap-3 py-3 text-destructive font-bold"><LogOut className="w-5 h-5" /> EXIT VAULT</DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -530,8 +544,8 @@ export default function Dashboard() {
 
       {/* Financial Oversight (Manager Only) */}
       {profileId === 'manager' && financialSummary && (
-        <div className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700">
+        <div className="space-y-8 animate-in slide-in-from-top-4 duration-700">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
               <CardHeader className="p-5 pb-1">
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
@@ -649,7 +663,7 @@ export default function Dashboard() {
 
       {/* Finance Portal (Staff/Finance) */}
       {profileId === 'finance' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-1000">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in zoom-in-95 duration-700">
           <Card className="shadow-sm border-none rounded-2xl bg-white">
             <CardHeader className="border-b bg-slate-50/20">
               <CardTitle className="text-sm font-black uppercase flex items-center gap-2">
@@ -660,15 +674,15 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400">Cash Intake</label>
-                  <Input type="number" placeholder="0.00" value={financeCash} onChange={(e) => setFinanceCash(e.target.value)} className="h-12 rounded-xl font-black" />
+                  <Input type="number" placeholder="0.00" value={financeCash} onChange={(e) => setFinanceCash(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400">Card Intake</label>
-                  <Input type="number" placeholder="0.00" value={financeCard} onChange={(e) => setFinanceCard(e.target.value)} className="h-12 rounded-xl font-black" />
+                  <Input type="number" placeholder="0.00" value={financeCard} onChange={(e) => setFinanceCard(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
                 </div>
               </div>
               <div className="flex gap-4">
-                <Button onClick={handleSaveFinance} className="flex-1 h-12 rounded-xl font-black uppercase text-xs">
+                <Button onClick={handleSaveFinance} className="flex-1 h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">
                   {currentDayFinance ? 'Update Report' : 'Sync Daily Intake'}
                 </Button>
                 {currentDayFinance && (
@@ -694,10 +708,10 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="p-8 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input placeholder="Description..." value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="h-12 rounded-xl font-bold" />
-                <Input type="number" placeholder="Amount" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} className="h-12 rounded-xl font-black" />
+                <Input placeholder="Description..." value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="h-12 rounded-xl font-bold focus-visible:ring-primary" />
+                <Input type="number" placeholder="Amount" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
               </div>
-              <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black uppercase text-xs">Log Expense</Button>
+              <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Log Expense</Button>
               <Separator />
               <ScrollArea className="h-[150px]">
                 <div className="space-y-2">
@@ -706,7 +720,7 @@ export default function Dashboard() {
                       <span className="font-bold text-xs uppercase">{exp.description}</span>
                       <div className="flex items-center gap-3">
                         <span className="font-black text-destructive">£{exp.amount.toFixed(2)}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => deleteExpense(exp.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteExpense(exp.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     </div>
                   ))}
@@ -719,7 +733,7 @@ export default function Dashboard() {
 
       {/* Sales Entry (Staff Profile) */}
       {profileId === 'staff' && (
-        <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white">
+        <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white animate-in slide-in-from-bottom-4 duration-700">
           <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
             <div className="flex items-center gap-3">
               <History className="w-5 h-5 text-primary" />
@@ -732,7 +746,7 @@ export default function Dashboard() {
               <div className="md:col-span-3 space-y-3">
                 <label className="text-[10px] font-black uppercase text-slate-400">Seller Entity</label>
                 <Select value={entrySellerId} onValueChange={setEntrySellerId}>
-                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm">
+                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary">
                     <SelectValue placeholder="Select seller" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -746,7 +760,7 @@ export default function Dashboard() {
                 <label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label>
                 <Input 
                   placeholder="e.g., Rare Holographic Charizard" 
-                  className="bg-white h-12 rounded-xl px-4 font-bold"
+                  className="bg-white h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
                   value={newSaleCard}
                   onChange={(e) => setNewSaleCard(e.target.value)}
                 />
@@ -759,7 +773,7 @@ export default function Dashboard() {
                     type="number" 
                     step="0.01"
                     placeholder="0.00" 
-                    className="bg-white h-12 rounded-xl pl-8 font-black"
+                    className="bg-white h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
                     value={newSalePrice}
                     onChange={(e) => setNewSalePrice(e.target.value)}
                   />
@@ -767,7 +781,7 @@ export default function Dashboard() {
               </div>
               <div className="md:col-span-2">
                 <Button 
-                  className="w-full h-12 rounded-xl font-black uppercase text-xs"
+                  className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
                   onClick={handleAddSale}
                   disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}
                 >
@@ -790,7 +804,7 @@ export default function Dashboard() {
                     allDailySales.map((sale) => (
                       <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
                         <TableCell className="pl-6">
-                          <Badge variant="outline" className="font-black text-[10px] uppercase bg-white">
+                          <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">
                             {sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}
                           </Badge>
                         </TableCell>
@@ -835,7 +849,7 @@ export default function Dashboard() {
                           <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
                           <Button 
                             size="sm" 
-                            className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity bg-primary"
                             onClick={() => {
                               setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
                               setIsSettlementDialogOpen(true);
@@ -881,10 +895,10 @@ export default function Dashboard() {
                </CardContent>
             </Card>
 
-            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-green-500">
+            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-primary">
                <CardHeader className="bg-white/5 px-6 py-4 border-b border-white/10 flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="bg-green-500 text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
+                    <div className="bg-primary text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
                     <div>
                       <CardTitle className="text-lg font-black uppercase">Friday Prediction</CardTitle>
                       <p className="text-[10px] text-white/40 font-bold uppercase">Estimated Cash Balance</p>
@@ -893,7 +907,7 @@ export default function Dashboard() {
                </CardHeader>
                <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
                   <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
-                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-green-400'}`}>
+                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-primary'}`}>
                     £{predictedFridayPosition.toFixed(2)}
                   </div>
                   <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
@@ -932,7 +946,7 @@ export default function Dashboard() {
             <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Total Global P&L</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
-                <div className={`text-xl font-black ${globalAudit.netProfit < 0 ? 'text-destructive' : 'text-green-400'}`}>
+                <div className={`text-xl font-black ${globalAudit.netProfit < 0 ? 'text-destructive' : 'text-primary'}`}>
                   £{globalAudit.netProfit.toFixed(2)}
                 </div>
               </CardContent>
@@ -951,7 +965,7 @@ export default function Dashboard() {
                </CardHeader>
                <CardContent className="p-8 pt-0 space-y-6">
                   <Select value={selectedSellerId} onValueChange={handleSellerSelect}>
-                    <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50">
+                    <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50 focus:ring-primary">
                       <SelectValue placeholder="WHICH SELLER?" />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl">
@@ -961,7 +975,7 @@ export default function Dashboard() {
                     </SelectContent>
                   </Select>
                   {authenticatedSellerId && (
-                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px]">
+                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px] border-primary/20 text-primary">
                       <Download className="w-4 h-4" /> Export Report (PDF)
                     </Button>
                   )}
@@ -1050,7 +1064,7 @@ export default function Dashboard() {
             />
           </div>
           <DialogFooter className="flex-col gap-3">
-            <Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs">Unlock Vault</Button>
+            <Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Unlock Vault</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1072,7 +1086,7 @@ export default function Dashboard() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs">Authorize Access</Button>
+            <Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Authorize Access</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1088,11 +1102,11 @@ export default function Dashboard() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-8 grid grid-cols-2 gap-4">
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('cash')}>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('cash')}>
                <Banknote className="w-6 h-6" />
                <span className="font-black uppercase text-[10px]">Cash</span>
              </Button>
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all" onClick={() => handleMarkBatchPaid('transfer')}>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('transfer')}>
                <Send className="w-6 h-6" />
                <span className="font-black uppercase text-[10px]">Transfer</span>
              </Button>
