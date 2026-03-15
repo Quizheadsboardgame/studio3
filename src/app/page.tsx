@@ -444,7 +444,7 @@ export default function Dashboard() {
     doc.text(`Total Gross:`, 125, finalY + 16);
     doc.text(`£${sellerStats.total.toFixed(2)}`, 190, finalY + 16, { align: 'right' });
     
-    doc.text(`Manager Cut:`, 125, finalY + 22);
+    doc.text(`NC Commission:`, 125, finalY + 22);
     doc.text(`£${sellerStats.commission.toFixed(2)}`, 190, finalY + 22, { align: 'right' });
     
     doc.setFontSize(11);
@@ -546,7 +546,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700">
           {[
             { label: "Daily Revenue", value: `£${dailyStats.totalSales.toFixed(2)}`, icon: Coins },
-            { label: "Comm. Earned", value: `£${dailyStats.totalCommission.toFixed(2)}`, icon: TrendingUp },
+            { label: "NC Commission", value: `£${dailyStats.totalCommission.toFixed(2)}`, icon: TrendingUp },
             { label: "Daily Volume", value: `${dailyStats.totalCards} Logs`, icon: Activity },
             { label: "Top Performer", value: dailyStats.topSellerName, icon: Users }
           ].map((stat, i) => (
@@ -711,7 +711,7 @@ export default function Dashboard() {
           <Card className="border-none shadow-sm rounded-2xl group hover:shadow-md transition-all bg-white">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Manager Cut
+                NC Commission
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 pt-0">
