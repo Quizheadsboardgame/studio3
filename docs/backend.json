@@ -22,6 +22,10 @@
         "password": {
           "type": "string",
           "description": "A secure access key for the seller to view their personal performance."
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Whether the seller is currently archived (inactive) but still in the database."
         }
       },
       "required": [

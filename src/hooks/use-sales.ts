@@ -31,6 +31,7 @@ export type Seller = {
   name: string;
   defaultCommission?: number;
   password?: string;
+  archived?: boolean;
 };
 
 export function useSales(profileId: string) {
@@ -120,16 +121,17 @@ export function useSales(profileId: string) {
       id: sellerId, 
       name, 
       defaultCommission,
-      password: randomPassword 
+      password: randomPassword,
+      archived: false
     }, { merge: true });
   }, [sellersRef, staffSellersRef, profileId]);
 
-  const removeSeller = useCallback((sellerId: string) => {
+  const updateSeller = useCallback((sellerId: string, updatedFields: Partial<Seller>) => {
     const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!sellerId || !targetRef) return;
     
     const docRef = doc(targetRef, sellerId);
-    deleteDocumentNonBlocking(docRef);
+    updateDocumentNonBlocking(docRef, updatedFields);
   }, [sellersRef, staffSellersRef, profileId]);
 
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
@@ -180,7 +182,7 @@ export function useSales(profileId: string) {
     sales: salesByDate,
     isLoaded,
     addSeller,
-    removeSeller,
+    updateSeller,
     addSale,
     updateSale,
     deleteSale,

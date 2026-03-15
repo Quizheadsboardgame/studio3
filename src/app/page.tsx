@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -27,7 +28,9 @@ import {
   User,
   KeyRound,
   Eye,
-  EyeOff
+  EyeOff,
+  Archive,
+  RefreshCw
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,7 +67,7 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
 
-import { useSales, Sale } from "@/hooks/use-sales";
+import { useSales, Sale, Seller } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -101,7 +104,14 @@ export default function Dashboard() {
   const [sellerPasswordInput, setSellerPasswordInput] = useState("");
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
 
-  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
+  // Manager Seller Editing
+  const [editingSeller, setEditingSeller] = useState<Seller | null>(null);
+  const [editSellerName, setEditSellerName] = useState("");
+  const [editSellerComm, setEditSellerComm] = useState("");
+  const [editSellerPass, setEditSellerPass] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+
+  const { sellers, sales, isLoaded, addSeller, updateSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,11 +144,15 @@ export default function Dashboard() {
     }
   }, [user, isUserLoading, auth]);
 
+  // Use only active sellers for dropdowns unless specifically managing archived
+  const activeSellers = useMemo(() => sellers.filter(s => !s.archived), [sellers]);
+  const archivedSellers = useMemo(() => sellers.filter(s => s.archived), [sellers]);
+
   useEffect(() => {
-    if (sellers.length > 0 && !entrySellerId) {
-      setEntrySellerId(sellers[0].id);
+    if (activeSellers.length > 0 && !entrySellerId) {
+      setEntrySellerId(activeSellers[0].id);
     }
-  }, [sellers, entrySellerId]);
+  }, [activeSellers, entrySellerId]);
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
 
@@ -164,7 +178,7 @@ export default function Dashboard() {
   }, [sellerDailySales]);
 
   const chartData = useMemo(() => {
-    return sellers.map(seller => {
+    return activeSellers.map(seller => {
       const sellerSales = dailySalesData[seller.id] || [];
       return {
         name: seller.name,
@@ -172,7 +186,7 @@ export default function Dashboard() {
         commission: sellerSales.reduce((acc, s) => acc + (s.commission || 0), 0)
       };
     }).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
-  }, [sellers, dailySalesData]);
+  }, [activeSellers, dailySalesData]);
 
   const dailyStats = useMemo(() => {
     let totalSales = 0;
@@ -181,7 +195,7 @@ export default function Dashboard() {
     let maxSellerTotal = 0;
     let topSellerName = "-";
 
-    sellers.forEach((seller) => {
+    activeSellers.forEach((seller) => {
       const sellerSales = dailySalesData[seller.id] || [];
       const sellerTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
       const sellerComm = sellerSales.reduce((acc, s) => acc + (s.commission || 0), 0);
@@ -197,7 +211,7 @@ export default function Dashboard() {
     });
 
     return { totalSales, totalCommission, totalCards, topSellerName };
-  }, [sellers, dailySalesData]);
+  }, [activeSellers, dailySalesData]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -248,6 +262,34 @@ export default function Dashboard() {
     } else {
       toast({ variant: "destructive", title: "Access Denied", description: "Incorrect access key." });
     }
+  };
+
+  const handleEditSeller = (seller: Seller) => {
+    setEditingSeller(seller);
+    setEditSellerName(seller.name);
+    setEditSellerComm(seller.defaultCommission?.toString() || "0");
+    setEditSellerPass(seller.password || "");
+  };
+
+  const handleSaveSeller = () => {
+    if (editingSeller && editSellerName) {
+      updateSeller(editingSeller.id, {
+        name: editSellerName,
+        defaultCommission: parseFloat(editSellerComm) || 0,
+        password: editSellerPass
+      });
+      setEditingSeller(null);
+      toast({ title: "Updated", description: "Entity details modified successfully." });
+    }
+  };
+
+  const handleArchiveSeller = (sellerId: string, archive: boolean) => {
+    updateSeller(sellerId, { archived: archive });
+    toast({ 
+      title: archive ? "Entity Archived" : "Entity Reactivated", 
+      description: archive ? "Seller is now hidden from staff logging." : "Seller is now available for logging." 
+    });
+    if (editingSeller?.id === sellerId) setEditingSeller(null);
   };
 
   const handleAddSale = () => {
@@ -426,16 +468,26 @@ export default function Dashboard() {
             <CardHeader className="border-b bg-muted/10">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" /> Seller Credentials
+                  <Users className="w-4 h-4 text-primary" /> Entity Credentials
                 </CardTitle>
-                <ShieldCheck className="w-4 h-4 text-muted-foreground/40" />
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className={`h-7 w-7 ${showArchived ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
+                    onClick={() => setShowArchived(!showArchived)}
+                    title={showArchived ? "Hide Archived" : "Show Archived"}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-3">
                   <Input 
-                    placeholder="Entity Name..." 
+                    placeholder="New Entity Name..." 
                     className="h-10 bg-muted/30 border-none rounded-xl font-bold text-xs"
                     value={newSellerName}
                     onChange={(e) => setNewSellerName(e.target.value)}
@@ -468,34 +520,28 @@ export default function Dashboard() {
 
               <Separator />
 
-              <ScrollArea className="h-[120px] pr-2">
+              <ScrollArea className="h-[200px] pr-2">
                 <div className="flex flex-col gap-2">
-                  {sellers.map((s) => (
-                    <div 
+                  {(showArchived ? archivedSellers : activeSellers).map((s) => (
+                    <button 
                       key={s.id} 
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-black/5"
+                      onClick={() => handleEditSeller(s)}
+                      className="w-full text-left flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-black/5 hover:bg-muted/40 transition-all group"
                     >
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-xs">{s.name}</span>
+                          <span className={`font-black text-xs ${s.archived ? 'text-muted-foreground line-through' : ''}`}>{s.name}</span>
                           <Badge variant="outline" className="text-[10px] font-mono font-black bg-primary/10 border-primary/30 text-primary h-5 px-1.5 rounded-md">
                             {s.password}
                           </Badge>
                         </div>
                         <span className="text-[9px] font-bold text-muted-foreground uppercase">{s.defaultCommission}% Commission</span>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-lg"
-                        onClick={() => removeSeller(s.id)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+                      <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
                   ))}
-                  {sellers.length === 0 && (
-                    <p className="text-[10px] text-center italic text-muted-foreground py-4">No entities provisioned</p>
+                  {(showArchived ? archivedSellers : activeSellers).length === 0 && (
+                    <p className="text-[10px] text-center italic text-muted-foreground py-4">No {showArchived ? 'archived' : 'active'} entities</p>
                   )}
                 </div>
               </ScrollArea>
@@ -572,7 +618,7 @@ export default function Dashboard() {
                       <SelectValue placeholder="Select active seller" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-primary/10 shadow-2xl">
-                      {sellers.map((s) => (
+                      {activeSellers.map((s) => (
                         <SelectItem key={s.id} value={s.id} className="font-bold py-3">
                           {s.name}
                         </SelectItem>
@@ -679,7 +725,7 @@ export default function Dashboard() {
                           <SelectValue placeholder="Identify yourself..." />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl">
-                          {sellers.map((s) => (
+                          {activeSellers.map((s) => (
                             <SelectItem key={s.id} value={s.id} className="font-bold text-xs">
                               {s.name}
                             </SelectItem>
@@ -773,7 +819,7 @@ export default function Dashboard() {
                   <TabsTrigger value="all" className="px-8 h-12 data-[state=active]:bg-card data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px] gap-2">
                     <Users className="w-4 h-4" /> Global View
                   </TabsTrigger>
-                  {sellers.map((s) => (
+                  {activeSellers.map((s) => (
                     <TabsTrigger key={s.id} value={s.id} className="px-8 h-12 data-[state=active]:bg-card data-[state=active]:shadow-lg rounded-lg transition-all font-black uppercase tracking-widest text-[10px]">
                       {s.name}
                     </TabsTrigger>
@@ -888,7 +934,7 @@ export default function Dashboard() {
                 </div>
               </TabsContent>
 
-              {sellers.map((s) => {
+              {activeSellers.map((s) => {
                 const sellerDailySales = dailySalesData[s.id] || [];
                 return (
                   <TabsContent key={s.id} value={s.id} className="space-y-6 mt-0 focus-visible:outline-none">
@@ -1145,7 +1191,7 @@ export default function Dashboard() {
             <div className="bg-accent/10 p-4 rounded-3xl mb-4">
               <KeyRound className="w-8 h-8 text-accent" />
             </div>
-            <DialogTitle className="text-2xl font-black tracking-tight">Identify Verification</DialogTitle>
+            <DialogTitle className="text-2xl font-black tracking-tight">Identity Verification</DialogTitle>
             <DialogDescription className="font-medium text-muted-foreground">
               Enter your unique access key to unlock your personal revenue logs.
             </DialogDescription>
@@ -1167,6 +1213,71 @@ export default function Dashboard() {
               setIsSellerPasswordDialogOpen(false);
               setSelectedSellerId("");
             }} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Seller Edit Dialog */}
+      <Dialog open={!!editingSeller} onOpenChange={() => setEditingSeller(null)}>
+        <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center">
+            <div className="bg-primary/10 p-4 rounded-3xl mb-4">
+              <Settings2 className="w-8 h-8 text-primary" />
+            </div>
+            <DialogTitle className="text-2xl font-black tracking-tight">Entity Oversight</DialogTitle>
+            <DialogDescription className="font-medium text-muted-foreground">
+              Modify entity credentials or archival status.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Entity Name</label>
+              <Input
+                className="h-12 bg-muted/30 border-none rounded-2xl font-bold"
+                value={editSellerName}
+                onChange={(e) => setEditSellerName(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Comm %</label>
+                <Input
+                  type="number"
+                  className="h-12 bg-muted/30 border-none rounded-2xl font-black"
+                  value={editSellerComm}
+                  onChange={(e) => setEditSellerComm(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Access Key</label>
+                <Input
+                  className="h-12 bg-muted/30 border-none rounded-2xl font-black uppercase text-primary"
+                  value={editSellerPass}
+                  onChange={(e) => setEditSellerPass(e.target.value.toUpperCase())}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-col gap-3">
+            <Button onClick={handleSaveSeller} className="w-full h-14 rounded-2xl shadow-xl shadow-primary/30 font-black uppercase tracking-widest text-xs">Save Changes</Button>
+            {editingSeller?.archived ? (
+              <Button 
+                variant="outline" 
+                onClick={() => handleArchiveSeller(editingSeller.id, false)} 
+                className="w-full h-12 rounded-2xl border-emerald-500/30 text-emerald-600 font-black uppercase tracking-widest text-[10px] gap-2"
+              >
+                <RefreshCw className="w-4 h-4" /> Reactivate Entity
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                onClick={() => handleArchiveSeller(editingSeller!.id, true)} 
+                className="w-full h-12 rounded-2xl border-destructive/30 text-destructive font-black uppercase tracking-widest text-[10px] gap-2"
+              >
+                <Archive className="w-4 h-4" /> Archive Entity
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setEditingSeller(null)} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
