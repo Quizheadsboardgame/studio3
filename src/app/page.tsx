@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -33,7 +34,8 @@ import {
   ArrowRightLeft,
   Banknote,
   Send,
-  Download
+  Download,
+  FileText
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +79,10 @@ import {
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+
+// PDF Generation
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 type ProfileType = 'manager' | 'staff' | 'seller';
 
@@ -363,31 +369,82 @@ export default function Dashboard() {
     }
   };
 
-  const downloadSellerCSV = () => {
+  const handleDownloadPDF = () => {
     if (!authenticatedSellerId) return;
     const seller = sellers.find(s => s.id === authenticatedSellerId);
     if (!seller) return;
 
-    const headers = ["Date", "Card Name", "Gross Price", "Payout Status", "Payment Method", "Net Payout"];
-    const rows = sellerDailySales.map(sale => [
-      sale.saleDate,
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(37, 99, 235); // primary color
+    doc.text("Newton's Collectables", 14, 22);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(100);
+    doc.text("Official Sales & Payout Report", 14, 30);
+    
+    doc.setDrawColor(200);
+    doc.line(14, 35, 196, 35);
+
+    // Report Info
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.text(`Seller Entity: ${seller.name}`, 14, 45);
+    doc.text(`Report Date: ${selectedDate}`, 14, 50);
+    doc.text(`Generated: ${format(new Date(), "PPP p")}`, 14, 55);
+
+    // Table
+    const tableData = sellerDailySales.map(sale => [
       sale.cardName,
-      sale.price.toFixed(2),
-      sale.payoutStatus || 'pending',
-      sale.paymentMethod || 'N/A',
-      (sale.price - (sale.commission || 0)).toFixed(2)
+      `£${sale.price.toFixed(2)}`,
+      sale.payoutStatus === 'paid' ? `Settled (${sale.paymentMethod?.toUpperCase()})` : 'Pending',
+      `£${(sale.price - (sale.commission || 0)).toFixed(2)}`
     ]);
 
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `NC_Sales_${seller.name}_${selectedDate}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    autoTable(doc, {
+      startY: 65,
+      head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
+      body: tableData,
+      theme: 'striped',
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9 },
+      columnStyles: {
+        1: { halign: 'right' },
+        3: { halign: 'right', fontStyle: 'bold' }
+      }
+    });
+
+    // Summary Box
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    doc.setFillColor(248, 250, 252); // light background
+    doc.roundedRect(120, finalY, 76, 35, 3, 3, 'F');
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text("Financial Summary", 125, finalY + 8);
+    
+    doc.setFontSize(9);
+    doc.text(`Total Gross:`, 125, finalY + 16);
+    doc.text(`£${sellerStats.total.toFixed(2)}`, 190, finalY + 16, { align: 'right' });
+    
+    doc.text(`Manager Cut:`, 125, finalY + 22);
+    doc.text(`£${sellerStats.commission.toFixed(2)}`, 190, finalY + 22, { align: 'right' });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(22, 163, 74); // emerald-600
+    doc.text(`Net Daily Payout:`, 125, finalY + 30);
+    doc.text(`£${sellerStats.payout.toFixed(2)}`, 190, finalY + 30, { align: 'right' });
+
+    // Payout Date Notice
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text(`* Payout maturity date for this batch is scheduled for ${sellerStats.payoutDate}.`, 14, finalY + 45);
+
+    doc.save(`NC_Report_${seller.name}_${selectedDate}.pdf`);
+    toast({ title: "Report Generated", description: "PDF document saved to your device." });
   };
 
   if (!isLoaded || isUserLoading) {
@@ -930,8 +987,8 @@ export default function Dashboard() {
                     {selectedDate}
                   </Badge>
                   {authenticatedSellerId && (
-                    <Button variant="outline" size="sm" className="h-10 rounded-xl gap-2 font-bold text-xs" onClick={downloadSellerCSV}>
-                      <Download className="w-3.5 h-3.5" /> Download Report
+                    <Button variant="outline" size="sm" className="h-10 rounded-xl gap-2 font-black text-xs bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all" onClick={handleDownloadPDF}>
+                      <FileText className="w-3.5 h-3.5" /> Download PDF Report
                     </Button>
                   )}
                 </div>

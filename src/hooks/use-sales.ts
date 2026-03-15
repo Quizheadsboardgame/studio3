@@ -74,8 +74,7 @@ export function useSales(profileId: string) {
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || profileId !== 'manager') && !!user;
 
   // Combine and normalize sales
-  // CRITICAL: Any sale with a negative price must have 0 commission. 
-  // We normalize here to handle legacy data or edge cases.
+  // CRITICAL: Any sale with a negative price (refund) must result in £0 commission.
   const combinedSalesData = useMemo(() => {
     const normalize = (s: Sale) => ({
       ...s,
@@ -148,7 +147,7 @@ export function useSales(profileId: string) {
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
     
-    // If price is negative (refund), commission is strictly 0.
+    // REINFORCED: Negative price results in strictly 0 commission.
     const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
 
     const docRef = doc(salesRef);
@@ -174,7 +173,7 @@ export function useSales(profileId: string) {
         const seller = sellers.find(s => s.id === existingSale.sellerId);
         const commissionPercentage = seller?.defaultCommission || 0;
         
-        // Match the logic in addSale: negative price results in 0 commission.
+        // REINFORCED: Negative price results in strictly 0 commission.
         updatedFields.commission = updatedFields.price < 0 ? 0 : (updatedFields.price * commissionPercentage) / 100;
       }
     }
