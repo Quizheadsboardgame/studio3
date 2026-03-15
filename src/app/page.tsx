@@ -38,7 +38,10 @@ import {
   ChevronRight,
   PieChart,
   Calculator,
-  Receipt
+  Receipt,
+  ArrowUpRight,
+  ArrowDownRight,
+  Scale
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +76,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
+import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, CartesianGrid, Legend } from "recharts";
 
 import { useSales, Seller, ShopTotal, Expense } from "@/hooks/use-sales";
 import { 
@@ -94,9 +97,17 @@ const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
 const LEGAL_STATEMENT = "Newtons collectables is a trading names for journey together tcg Ltd company house number 16503957";
 
 const chartConfig = {
-  total: {
-    label: "Total Sales",
+  inHouse: {
+    label: "In-House Revenue",
     color: "hsl(var(--primary))",
+  },
+  commissions: {
+    label: "Seller Commissions",
+    color: "hsl(var(--chart-2))",
+  },
+  expenses: {
+    label: "Expenses",
+    color: "hsl(var(--destructive))",
   },
 } satisfies ChartConfig;
 
@@ -162,8 +173,7 @@ export default function Dashboard() {
   }, [user, isUserLoading, auth]);
 
   const activeSellers = useMemo(() => sellers.filter(s => !s.archived), [sellers]);
-  const archivedSellers = useMemo(() => sellers.filter(s => s.archived), [sellers]);
-
+  
   useEffect(() => {
     if (activeSellers.length > 0 && !entrySellerId) {
       setEntrySellerId(activeSellers[0].id);
@@ -189,51 +199,50 @@ export default function Dashboard() {
     };
   }, [sellerDailySales, selectedDate]);
 
-  const dailyStats = useMemo(() => {
-    let totalSales = 0;
-    let totalCommission = 0;
-    let totalCards = 0;
-    let maxSellerTotal = 0;
-    let topSellerName = "-";
-
-    activeSellers.forEach((seller) => {
-      const sellerSales = dailySalesData[seller.id] || [];
-      const sellerTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
-      totalSales += sellerTotal;
-      totalCommission += sellerSales.reduce((acc, s) => acc + (s.commission || 0), 0);
-      totalCards += sellerSales.length;
-      if (sellerTotal > maxSellerTotal) {
-        maxSellerTotal = sellerTotal;
-        topSellerName = seller.name;
-      }
-    });
-
-    return { totalSales, totalCommission, totalCards, topSellerName };
-  }, [activeSellers, dailySalesData]);
-
-  // True P&L Logic
-  const profitLoss = useMemo(() => {
+  // Comprehensive Financial Logic
+  const financialSummary = useMemo(() => {
     if (profileId !== 'manager') return null;
+
+    const totalSellerGross = allDailySales.reduce((acc, s) => acc + s.price, 0);
+    const totalSellerCommission = allDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const totalSellerPayoutLiability = totalSellerGross - totalSellerCommission;
     
-    // Seller Liability = Money we collected that belongs to sellers (Net payout)
-    const sellerPayouts = allDailySales.reduce((acc, s) => acc + (s.price - (s.commission || 0)), 0);
-    
-    // Total Shop Intake = Recorded from finance profile (Total cash/card in till)
     const shopIntake = currentDayFinance?.totalIntake || 0;
+    const inHouseRevenue = Math.max(0, shopIntake - totalSellerGross);
     
-    // Expenses
     const totalExpenses = currentDayExpenses.reduce((acc, e) => acc + e.amount, 0);
     
-    // Net Shop Profit = Total Intake - What we owe sellers - expenses
-    const netProfit = shopIntake - sellerPayouts - totalExpenses;
+    // Settlements Paid today
+    const settlementsPaidToday = combinedSalesData.reduce((acc, s) => {
+      const isPaidToday = s.payoutStatus === 'paid' && s.paidAt && s.paidAt.startsWith(selectedDate);
+      return isPaidToday ? acc + (s.price - (s.commission || 0)) : acc;
+    }, 0);
+
+    const netProfit = inHouseRevenue + totalSellerCommission - totalExpenses;
+    const runningCashPosition = shopIntake - totalExpenses - settlementsPaidToday;
 
     return {
       intake: shopIntake,
-      payoutLiability: sellerPayouts,
+      inHouseRevenue,
+      sellerGross: totalSellerGross,
+      sellerCommission: totalSellerCommission,
+      sellerLiability: totalSellerPayoutLiability,
       expenses: totalExpenses,
-      net: netProfit
+      settlementsPaid: settlementsPaidToday,
+      netProfit,
+      runningCashPosition
     };
-  }, [profileId, allDailySales, currentDayFinance, currentDayExpenses]);
+  }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate]);
+
+  const chartData = useMemo(() => {
+    if (!financialSummary) return [];
+    return [{
+      name: format(parseISO(selectedDate), "MMM d"),
+      inHouse: financialSummary.inHouseRevenue,
+      commissions: financialSummary.sellerCommission,
+      expenses: financialSummary.expenses
+    }];
+  }, [financialSummary, selectedDate]);
 
   const payoutForecast = useMemo(() => {
     if (profileId !== 'manager') return null;
@@ -327,24 +336,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleEditSeller = (seller: Seller) => {
-    setEditingSeller(seller);
-    setEditSellerName(seller.name);
-    setEditSellerComm(seller.defaultCommission?.toString() || "0");
-    setEditSellerPass(seller.password || "");
-  };
-
-  const handleSaveSeller = () => {
-    if (editingSeller && editSellerName) {
-      updateSeller(editingSeller.id, {
-        name: editSellerName,
-        defaultCommission: parseFloat(editSellerComm) || 0,
-        password: editSellerPass
-      });
-      setEditingSeller(null);
-    }
-  };
-
   const handleAddSale = () => {
     const priceNum = parseFloat(newSalePrice);
     if (entrySellerId && newSaleCard.trim() && !isNaN(priceNum)) {
@@ -360,6 +351,7 @@ export default function Dashboard() {
       markSalesAsPaid(settlementBatch.saleIds, method, settlementBatch.originMap);
       setIsSettlementDialogOpen(false);
       setSettlementBatch(null);
+      toast({ title: "Settlement Confirmed", description: "Payout recorded in daily audit." });
     }
   };
 
@@ -388,21 +380,15 @@ export default function Dashboard() {
     if (!seller) return;
 
     const doc = new jsPDF();
-    
-    // Generate sequential invoice number based on history
     const uniqueEvents = Array.from(new Set(combinedSalesData.map(s => `${s.sellerId}_${s.saleDate}`))).sort();
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
-    // Branding - Strict Monochrome
     doc.setFontSize(22);
     doc.text("Newton's Collectables", 14, 20);
-    
     doc.setFontSize(10);
     doc.text(`INVOICE #${invoiceNum}`, 196, 20, { align: 'right' });
-    
     doc.line(14, 33, 196, 33);
-    
     doc.text(`Seller: ${seller.name}`, 14, 43);
     doc.text(`Report Date: ${selectedDate}`, 14, 48);
 
@@ -421,19 +407,14 @@ export default function Dashboard() {
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 10;
-    
-    // Summary Box
     doc.rect(120, finalY, 76, 35);
     doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 12);
     doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 18);
     doc.setFont(undefined, 'bold');
     doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 28);
-    
-    // Legal Footer
     doc.setFontSize(8);
     doc.setFont(undefined, 'normal');
     doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
-
     doc.save(`NC_Invoice_${invoiceNum}.pdf`);
   };
 
@@ -483,41 +464,122 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* P&L Overview (Manager Only) */}
-      {profileId === 'manager' && profitLoss && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700">
-          <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
-            <CardHeader className="p-5 pb-2">
-              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <div className="text-2xl font-black">£{profitLoss.intake.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-none shadow-sm rounded-2xl bg-white">
-            <CardHeader className="p-5 pb-2">
-              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Seller Liabilities</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <div className="text-2xl font-black text-destructive">£{profitLoss.payoutLiability.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-none shadow-sm rounded-2xl bg-white">
-            <CardHeader className="p-5 pb-2">
-              <CardTitle className="text-[10px] font-black uppercase text-slate-400">Shop Expenses</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <div className="text-2xl font-black text-slate-600">£{profitLoss.expenses.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-          <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-green-500">
-            <CardHeader className="p-5 pb-2">
-              <CardTitle className="text-[10px] font-black uppercase text-green-500">Net Shop Profit</CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <div className="text-2xl font-black text-green-600">£{profitLoss.net.toFixed(2)}</div>
-            </CardContent>
-          </Card>
+      {/* Financial Oversight (Manager Only) */}
+      {profileId === 'manager' && financialSummary && (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700">
+            <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
+              <CardHeader className="p-5 pb-1">
+                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black">£{financialSummary.intake.toFixed(2)}</div>
+                <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
+                  <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-5 pb-1">
+                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-green-600">£{financialSummary.netProfit.toFixed(2)}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Liabilities & Costs</div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-5 pb-1">
+                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Paid Settlements Today</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-destructive">£{financialSummary.settlementsPaid.toFixed(2)}</div>
+                <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
+                  <ArrowDownRight className="w-2 h-2 text-destructive" /> Outflow recorded
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
+              <CardHeader className="p-5 pb-1">
+                <CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black">£{financialSummary.runningCashPosition.toFixed(2)}</div>
+                <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance (Intake - Paid)</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <CardTitle className="text-sm font-black uppercase flex items-center justify-between">
+                  Daily Revenue Composition
+                  <Badge variant="outline" className="text-[8px] font-black bg-white">TREND ANALYSIS</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-8">
+                <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                  <BarChart data={chartData}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                    <XAxis dataKey="name" hide />
+                    <YAxis hide />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="inHouse" fill="var(--color-inHouse)" radius={4} name="In-House Gross" />
+                    <Bar dataKey="commissions" fill="var(--color-commissions)" radius={4} name="NC Commission" />
+                    <Bar dataKey="expenses" fill="var(--color-expenses)" radius={4} name="Expenses" />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <CardTitle className="text-sm font-black uppercase">Revenue Split</CardTitle>
+              </CardHeader>
+              <CardContent className="p-8 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-slate-400">In-House Sales</span>
+                    <span className="font-black text-primary">£{financialSummary.inHouseRevenue.toFixed(2)}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary" 
+                      style={{ width: `${(financialSummary.inHouseRevenue / financialSummary.intake) * 100}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="text-[10px] font-black uppercase text-slate-400">External Seller Gross</span>
+                    <span className="font-black text-slate-700">£{financialSummary.sellerGross.toFixed(2)}</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-slate-300" 
+                      style={{ width: `${(financialSummary.sellerGross / financialSummary.intake) * 100}%` }}
+                    />
+                  </div>
+
+                  <Separator />
+                  
+                  <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-bold uppercase text-slate-400">Total NC Commission Earned</span>
+                      <span className="font-black text-green-600">£{financialSummary.sellerCommission.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-bold uppercase text-slate-400">Owed to Sellers (Unpaid)</span>
+                      <span className="font-black text-destructive">£{financialSummary.sellerLiability.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
