@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -59,7 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
 
 import { useSales, Sale } from "@/hooks/use-sales";
@@ -75,6 +74,13 @@ type ProfileType = 'manager' | 'staff';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
+
+const chartConfig = {
+  total: {
+    label: "Total Sales",
+    color: "hsl(var(--primary))",
+  },
+} satisfies ChartConfig;
 
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
@@ -487,18 +493,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="pt-8 h-[300px]">
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} tickFormatter={(val) => `£${val}`} />
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="total" radius={[8, 8, 0, 0]}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.4)'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <ChartContainer config={chartConfig}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} tickFormatter={(val) => `£${val}`} />
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                      <Bar dataKey="total" radius={[8, 8, 0, 0]}>
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={index === 0 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.4)'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 italic font-medium">
                   No sales data available for {selectedDate}
