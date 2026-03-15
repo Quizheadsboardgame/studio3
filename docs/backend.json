@@ -140,14 +140,14 @@
         }
       },
       {
-        "path": "/shop-finance/totals/{date}",
+        "path": "/shop-finance-totals/{date}",
         "definition": {
           "entityName": "ShopTotal",
           "description": "Daily total shop intake records."
         }
       },
       {
-        "path": "/shop-finance/expenses/{expenseId}",
+        "path": "/shop-finance-expenses/{expenseId}",
         "definition": {
           "entityName": "Expense",
           "description": "Daily shop expenses."

@@ -84,12 +84,12 @@ export function useSales(profileId: string) {
 
   const shopTotalsRef = useMemoFirebase(() => {
     if (!db || !user) return null;
-    return collection(db, "shop-finance", "totals");
+    return collection(db, "shop-finance-totals");
   }, [db, user]);
 
   const expensesRef = useMemoFirebase(() => {
     if (!db || !user) return null;
-    return collection(db, "shop-finance", "expenses");
+    return collection(db, "shop-finance-expenses");
   }, [db, user]);
 
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
