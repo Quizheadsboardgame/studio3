@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format } from "date-fns";
+import { format, addDays, parseISO } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -30,7 +30,10 @@ import {
   Eye,
   EyeOff,
   Archive,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  Wallet,
+  ArrowRightLeft
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -169,13 +172,16 @@ export default function Dashboard() {
   const sellerStats = useMemo(() => {
     const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
     const comm = sellerDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const payoutDate = selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A";
+    
     return {
       total,
       commission: comm,
       payout: total - comm,
-      count: sellerDailySales.length
+      count: sellerDailySales.length,
+      payoutDate
     };
-  }, [sellerDailySales]);
+  }, [sellerDailySales, selectedDate]);
 
   const chartData = useMemo(() => {
     return activeSellers.map(seller => {
@@ -212,6 +218,43 @@ export default function Dashboard() {
 
     return { totalSales, totalCommission, totalCards, topSellerName };
   }, [activeSellers, dailySalesData]);
+
+  // Payout Forecast for Manager
+  const payoutForecast = useMemo(() => {
+    if (profileId !== 'manager') return null;
+
+    const breakdown: Record<string, { sellerName: string, totalPending: number, cardCount: number }> = {};
+    let totalGlobalPending = 0;
+
+    // Iterate through all sales across all dates
+    Object.keys(sales).forEach(date => {
+      const dayData = sales[date];
+      Object.keys(dayData).forEach(sellerId => {
+        const sellerSales = dayData[sellerId];
+        const seller = sellers.find(s => s.id === sellerId);
+        
+        if (!breakdown[sellerId]) {
+          breakdown[sellerId] = { 
+            sellerName: seller?.name || sellerId, 
+            totalPending: 0, 
+            cardCount: 0 
+          };
+        }
+
+        sellerSales.forEach(sale => {
+          const net = sale.price - (sale.commission || 0);
+          breakdown[sellerId].totalPending += net;
+          breakdown[sellerId].cardCount += 1;
+          totalGlobalPending += net;
+        });
+      });
+    });
+
+    return {
+      totalGlobalPending,
+      sellers: Object.values(breakdown).sort((a, b) => b.totalPending - a.totalPending)
+    };
+  }, [sales, sellers, profileId]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -551,41 +594,96 @@ export default function Dashboard() {
       )}
 
       {profileId === 'seller' && authenticatedSellerId && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4 duration-700">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-in slide-in-from-bottom-4 duration-700">
            <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
-                <TrendingUp className="w-3.5 h-3.5 text-primary" /> Your Gross Sales
+                <TrendingUp className="w-3.5 h-3.5 text-primary" /> Gross Sales
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 pt-0">
               <div className="text-3xl font-black text-primary">£{sellerStats.total.toFixed(2)}</div>
-              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Across {sellerStats.count} items sold</p>
+              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Across {sellerStats.count} items</p>
             </CardContent>
           </Card>
           <Card className="border-none shadow-lg bg-emerald-50 rounded-2xl ring-1 ring-emerald-500/10 group hover:ring-emerald-500/30 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                <Coins className="w-3.5 h-3.5" /> Your Payout
+                <Wallet className="w-3.5 h-3.5" /> Your Payout
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 pt-0">
               <div className="text-3xl font-black text-emerald-700">£{sellerStats.payout.toFixed(2)}</div>
-              <p className="text-[10px] font-bold text-emerald-600/50 mt-1">Estimated earnings for {selectedDate}</p>
+              <p className="text-[10px] font-bold text-emerald-600/50 mt-1">Net daily earnings</p>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-lg bg-blue-50 rounded-2xl ring-1 ring-blue-500/10 group hover:ring-blue-500/30 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-blue-700/70 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5" /> Payout Date
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-xl font-black text-blue-700">{sellerStats.payoutDate}</div>
+              <p className="text-[10px] font-bold text-blue-600/50 mt-1">13-day settlement cycle</p>
             </CardContent>
           </Card>
           <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-primary" /> Commission Cut
+                <Activity className="w-3.5 h-3.5 text-primary" /> Manager Cut
               </CardTitle>
             </CardHeader>
             <CardContent className="p-5 pt-0">
               <div className="text-3xl font-black text-muted-foreground">£{sellerStats.commission.toFixed(2)}</div>
-              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Management fee contribution</p>
+              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Daily commission</p>
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {profileId === 'manager' && payoutForecast && (
+        <Card className="shadow-2xl border-none rounded-3xl overflow-hidden ring-1 ring-black/5 bg-card animate-in slide-in-from-bottom-6 duration-1000">
+           <CardHeader className="border-b bg-muted/20 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-emerald-100 p-2 rounded-xl">
+                    <ArrowRightLeft className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-black">Global Payout Forecast</CardTitle>
+                    <p className="text-xs text-muted-foreground font-medium">Tracking 13-day settlement obligations for all entities</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">Total Future Liabilities</p>
+                  <span className="text-2xl font-black text-emerald-600">£{payoutForecast.totalGlobalPending.toFixed(2)}</span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {payoutForecast.sellers.map((s, i) => (
+                  <div key={i} className="flex flex-col p-5 rounded-2xl bg-muted/20 border border-black/5 hover:bg-white hover:shadow-xl transition-all duration-300">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-black text-xs uppercase tracking-tight">{s.sellerName}</span>
+                      <Badge variant="outline" className="text-[8px] font-black uppercase h-5 bg-emerald-50 text-emerald-700 border-emerald-200">Pending</Badge>
+                    </div>
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Upcoming Payout</p>
+                        <span className="text-2xl font-black text-emerald-600">£{s.totalPending.toFixed(2)}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase">Volume</p>
+                        <span className="text-xs font-black">{s.cardCount} Cards</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+        </Card>
       )}
 
       <Card className="shadow-2xl border-none overflow-hidden rounded-2xl ring-1 ring-black/5 animate-in slide-in-from-bottom-8 duration-1000">
@@ -773,7 +871,14 @@ export default function Dashboard() {
                     </Table>
                   </div>
 
-                  <div className="flex justify-end pt-4">
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-4">
+                     <div className="bg-blue-50 border border-blue-200 px-6 py-4 rounded-2xl flex items-center gap-3">
+                        <Clock className="w-5 h-5 text-blue-600" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-blue-800/60">Payout Date</p>
+                          <p className="font-black text-blue-800">{sellerStats.payoutDate}</p>
+                        </div>
+                     </div>
                      <div className="bg-accent shadow-2xl shadow-accent/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Net Daily Payout</span>
