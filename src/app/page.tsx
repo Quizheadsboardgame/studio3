@@ -429,19 +429,19 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className={`grid grid-cols-1 ${profileId === 'manager' ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-4 animate-in slide-in-from-bottom-4 duration-700`}>
-        <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
-          <CardHeader className="p-5 pb-2">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-primary" /> Daily Revenue
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <div className="text-3xl font-black text-primary">£{dailyStats.totalSales.toFixed(2)}</div>
-            <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Aggregated across {dailyStats.totalCards} cards</p>
-          </CardContent>
-        </Card>
-        {profileId === 'manager' && (
+      {profileId === 'manager' && (
+        <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 animate-in slide-in-from-bottom-4 duration-700`}>
+          <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-primary" /> Daily Revenue
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-3xl font-black text-primary">£{dailyStats.totalSales.toFixed(2)}</div>
+              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Aggregated across {dailyStats.totalCards} cards</p>
+            </CardContent>
+          </Card>
           <Card className="border-none shadow-lg bg-emerald-50 rounded-2xl ring-1 ring-emerald-500/10 group hover:ring-emerald-500/30 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
@@ -453,18 +453,16 @@ export default function Dashboard() {
               <p className="text-[10px] font-bold text-emerald-600/50 mt-1">Manager's daily cut</p>
             </CardContent>
           </Card>
-        )}
-        <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
-          <CardHeader className="p-5 pb-2">
-            <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
-              <Activity className="w-3.5 h-3.5 text-primary" /> Daily Volume
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-5 pt-0">
-            <div className="text-3xl font-black">{dailyStats.totalCards} <span className="text-lg text-muted-foreground font-bold">Log entries</span></div>
-          </CardContent>
-        </Card>
-        {profileId === 'manager' && (
+          <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-primary" /> Daily Volume
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-3xl font-black">{dailyStats.totalCards} <span className="text-lg text-muted-foreground font-bold">Log entries</span></div>
+            </CardContent>
+          </Card>
           <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
             <CardHeader className="p-5 pb-2">
               <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
@@ -476,8 +474,8 @@ export default function Dashboard() {
               <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Highest individual revenue</p>
             </CardContent>
           </Card>
-        )}
-      </div>
+        </div>
+      )}
 
       {profileId === 'manager' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-1000">
@@ -969,17 +967,18 @@ export default function Dashboard() {
             <div className="bg-emerald-100 p-2 rounded-xl"><Coins className="w-5 h-5 text-emerald-600" /></div>
             NC Shared Vault Analytics ({profileId})
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
-              <CardHeader className="p-5 pb-2">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault Value</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
-              </CardContent>
-            </Card>
-            {isManagerAuthenticated ? (
-               <Card className="border-none shadow-xl bg-emerald-100/50 rounded-2xl ring-1 ring-emerald-500/20 hover:ring-emerald-500/40 transition-all">
+          
+          {profileId === 'manager' && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
+                <CardHeader className="p-5 pb-2">
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault Value</CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 pt-0">
+                  <div className="text-2xl font-black text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
+                </CardContent>
+              </Card>
+              <Card className="border-none shadow-xl bg-emerald-100/50 rounded-2xl ring-1 ring-emerald-500/20 hover:ring-emerald-500/40 transition-all">
                 <CardHeader className="p-5 pb-2">
                   <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-800/70">Global Comm.</CardTitle>
                 </CardHeader>
@@ -987,25 +986,16 @@ export default function Dashboard() {
                   <div className="text-2xl font-black text-emerald-800">£{allTimeStats.totalCommission.toFixed(2)}</div>
                 </CardContent>
               </Card>
-            ) : (
               <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
                 <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault Count</CardTitle>
+                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault MVP</CardTitle>
                 </CardHeader>
                 <CardContent className="p-5 pt-0">
-                  <div className="text-2xl font-black text-emerald-700">{allTimeStats.totalCards} cards</div>
+                  <div className="text-xl font-black text-emerald-700 truncate">{allTimeStats.topSeller}</div>
                 </CardContent>
               </Card>
-            )}
-            <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
-              <CardHeader className="p-5 pb-2">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault MVP</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-xl font-black text-emerald-700 truncate">{allTimeStats.topSeller}</div>
-              </CardContent>
-            </Card>
-          </div>
+            </div>
+          )}
 
           <Card className="shadow-2xl border-none h-[400px] rounded-3xl ring-1 ring-black/5 overflow-hidden">
             <CardHeader className="pb-4 bg-muted/10 border-b">
