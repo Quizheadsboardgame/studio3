@@ -87,6 +87,29 @@
         "saleDate",
         "sellerId"
       ]
+    },
+    "ShopTotal": {
+      "title": "Shop Total",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "cashIntake": { "type": "number" },
+        "cardIntake": { "type": "number" },
+        "totalIntake": { "type": "number" }
+      },
+      "required": ["date", "cashIntake", "cardIntake", "totalIntake"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" }
+      },
+      "required": ["date", "description", "amount"]
     }
   },
   "auth": {
@@ -103,17 +126,7 @@
           "schema": {
             "$ref": "#/backend/entities/Seller"
           },
-          "description": "Shared seller profiles for a specific role (Manager or Staff).",
-          "params": [
-            {
-              "name": "profileId",
-              "description": "The ID of the profile (e.g., 'manager', 'staff')."
-            },
-            {
-              "name": "sellerId",
-              "description": "The unique identifier for a specific Seller entity."
-            }
-          ]
+          "description": "Shared seller profiles."
         }
       },
       {
@@ -123,17 +136,21 @@
           "schema": {
             "$ref": "#/backend/entities/Sale"
           },
-          "description": "Shared sales transactions for a specific role (Manager or Staff).",
-          "params": [
-            {
-              "name": "profileId",
-              "description": "The ID of the profile (e.g., 'manager', 'staff')."
-            },
-            {
-              "name": "saleId",
-              "description": "The unique identifier for a specific Sale transaction."
-            }
-          ]
+          "description": "Shared sales transactions."
+        }
+      },
+      {
+        "path": "/shop-finance/totals/{date}",
+        "definition": {
+          "entityName": "ShopTotal",
+          "description": "Daily total shop intake records."
+        }
+      },
+      {
+        "path": "/shop-finance/expenses/{expenseId}",
+        "definition": {
+          "entityName": "Expense",
+          "description": "Daily shop expenses."
         }
       }
     ]

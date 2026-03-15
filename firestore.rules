@@ -3,13 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * Shared Role-Based Access:
-     * This application uses fixed profile identifiers ('manager', 'staff') 
-     * to allow shared data access across different devices.
-     * Any authenticated user (including anonymous) can access these shared buckets.
-     */
-
     function isSignedIn() {
       return request.auth != null;
     }
@@ -18,19 +11,24 @@ service cloud.firestore {
       return profileId == 'manager' || profileId == 'staff';
     }
 
-    // Rules for the profile document itself
     match /profiles/{profileId} {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
 
-    // Rules for sellers sub-collection
     match /profiles/{profileId}/sellers/{sellerId} {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
 
-    // Rules for sales sub-collection
     match /profiles/{profileId}/sales/{saleId} {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
+    }
+
+    match /shop-finance/totals/{date} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /shop-finance/expenses/{expenseId} {
+      allow read, write: if isSignedIn();
     }
 
     match /{path=**} {

@@ -23,7 +23,7 @@ export type Sale = {
   commission: number;
   saleDate: string;
   sellerId: string;
-  profileOrigin?: string; // Track which profile the sale came from
+  profileOrigin?: string;
   payoutStatus?: 'pending' | 'paid';
   paymentMethod?: 'cash' | 'transfer';
   paidAt?: string;
@@ -37,11 +37,25 @@ export type Seller = {
   archived?: boolean;
 };
 
+export type ShopTotal = {
+  date: string;
+  cashIntake: number;
+  cardIntake: number;
+  totalIntake: number;
+};
+
+export type Expense = {
+  id?: string;
+  date: string;
+  description: string;
+  amount: number;
+  category?: string;
+};
+
 export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  // Primary profile references
   const sellersRef = useMemoFirebase(() => {
     if (!db || !profileId || !user) return null;
     return collection(db, "profiles", profileId, "sellers");
@@ -52,7 +66,6 @@ export function useSales(profileId: string) {
     return collection(db, "profiles", profileId, "sales");
   }, [db, profileId, user]);
 
-  // If manager, we also need to manage and view the staff bucket
   const staffSalesRef = useMemoFirebase(() => {
     if (!db || !user || profileId !== 'manager') return null;
     return collection(db, "profiles", "staff", "sales");
@@ -63,67 +76,61 @@ export function useSales(profileId: string) {
     return collection(db, "profiles", "staff", "sellers");
   }, [db, user, profileId]);
 
-  // Real-time data for primary profile
+  const shopTotalsRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "shop-finance", "totals");
+  }, [db, user]);
+
+  const expensesRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "shop-finance", "expenses");
+  }, [db, user]);
+
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
-  
-  // Real-time data for staff (only if manager)
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
   const { data: staffSellersData, isLoading: staffSellersLoading } = useCollection<Seller>(staffSellersRef);
+  const { data: shopTotalsData } = useCollection<ShopTotal>(shopTotalsRef);
+  const { data: expensesData } = useCollection<Expense>(expensesRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || profileId !== 'manager') && !!user;
 
-  // Combine and normalize sales
-  // CRITICAL: Any sale with a negative price (refund) must result in £0 commission.
   const combinedSalesData = useMemo(() => {
     const normalize = (s: Sale) => ({
       ...s,
       commission: s.price < 0 ? 0 : s.commission
     });
-
     const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: profileId }));
     const staff = (staffSalesData || []).map(s => ({ ...normalize(s), profileOrigin: 'staff' }));
     return [...primary, ...staff];
   }, [primarySalesData, staffSalesData, profileId]);
 
-  // Combined Roster: Managers manage the staff roster too
   const sellers = useMemo(() => {
     const primary = sellersData || [];
     const staff = profileId === 'manager' ? (staffSellersData || []) : [];
-    
-    // Deduplicate by ID
     const all = [...primary];
     staff.forEach(s => {
-      if (!all.find(existing => existing.id === s.id)) {
-        all.push(s);
-      }
+      if (!all.find(existing => existing.id === s.id)) all.push(s);
     });
-
     return all.sort((a, b) => a.name.localeCompare(b.name));
   }, [sellersData, staffSellersData, profileId]);
 
-  // Transform sales into the nested structure the UI expects: { [date]: { [sellerId]: Sale[] } }
   const salesByDate = useMemo(() => {
     const result: Record<string, Record<string, Sale[]>> = {};
-    
     combinedSalesData.forEach((sale) => {
       if (!result[sale.saleDate]) result[sale.saleDate] = {};
       if (!result[sale.saleDate][sale.sellerId]) result[sale.saleDate][sale.sellerId] = [];
       result[sale.saleDate][sale.sellerId].push(sale);
     });
-
     return result;
   }, [combinedSalesData]);
 
   const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
     const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!name || !targetRef) return;
-    
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
     const docRef = doc(targetRef, sellerId);
-    
     const randomPassword = Math.random().toString(36).slice(-6).toUpperCase();
-    
     setDocumentNonBlocking(docRef, { 
       id: sellerId, 
       name, 
@@ -136,24 +143,18 @@ export function useSales(profileId: string) {
   const updateSeller = useCallback((sellerId: string, updatedFields: Partial<Seller>) => {
     const targetRef = (profileId === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!sellerId || !targetRef) return;
-    
     const docRef = doc(targetRef, sellerId);
     updateDocumentNonBlocking(docRef, updatedFields);
   }, [sellersRef, staffSellersRef, profileId]);
 
   const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
     if (!salesRef) return;
-    
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
-    
-    // REINFORCED: Negative price results in strictly 0 commission.
     const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
-
     const docRef = doc(salesRef);
-    const saleId = docRef.id;
     setDocumentNonBlocking(docRef, {
-      id: saleId,
+      id: docRef.id,
       cardName,
       price,
       commission: commissionAmount,
@@ -166,18 +167,14 @@ export function useSales(profileId: string) {
   const updateSale = useCallback((saleId: string, updatedFields: Partial<Sale>, origin?: string) => {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
     if (!targetRef || !saleId) return;
-
     if (updatedFields.price !== undefined) {
       const existingSale = combinedSalesData.find(s => s.id === saleId);
       if (existingSale) {
         const seller = sellers.find(s => s.id === existingSale.sellerId);
         const commissionPercentage = seller?.defaultCommission || 0;
-        
-        // REINFORCED: Negative price results in strictly 0 commission.
         updatedFields.commission = updatedFields.price < 0 ? 0 : (updatedFields.price * commissionPercentage) / 100;
       }
     }
-
     const docRef = doc(targetRef, saleId);
     updateDocumentNonBlocking(docRef, updatedFields);
   }, [salesRef, staffSalesRef, sellers, combinedSalesData]);
@@ -185,8 +182,7 @@ export function useSales(profileId: string) {
   const deleteSale = useCallback((saleId: string, origin?: string) => {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
     if (!targetRef || !saleId) return;
-    const docRef = doc(targetRef, saleId);
-    deleteDocumentNonBlocking(docRef);
+    deleteDocumentNonBlocking(doc(targetRef, saleId));
   }, [salesRef, staffSalesRef]);
 
   const markSalesAsPaid = useCallback((saleIds: string[], method: 'cash' | 'transfer', originMap: Record<string, string>) => {
@@ -194,8 +190,7 @@ export function useSales(profileId: string) {
       const origin = originMap[id];
       const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
       if (!targetRef) return;
-      const docRef = doc(targetRef, id);
-      updateDocumentNonBlocking(docRef, {
+      updateDocumentNonBlocking(doc(targetRef, id), {
         payoutStatus: 'paid',
         paymentMethod: method,
         paidAt: new Date().toISOString()
@@ -203,16 +198,47 @@ export function useSales(profileId: string) {
     });
   }, [salesRef, staffSalesRef]);
 
+  const setShopTotal = useCallback((date: string, cash: number, card: number) => {
+    if (!shopTotalsRef) return;
+    setDocumentNonBlocking(doc(shopTotalsRef, date), {
+      date,
+      cashIntake: cash,
+      cardIntake: card,
+      totalIntake: cash + card
+    }, { merge: true });
+  }, [shopTotalsRef]);
+
+  const addExpense = useCallback((date: string, description: string, amount: number) => {
+    if (!expensesRef) return;
+    const docRef = doc(expensesRef);
+    setDocumentNonBlocking(docRef, {
+      id: docRef.id,
+      date,
+      description,
+      amount
+    }, { merge: true });
+  }, [expensesRef]);
+
+  const deleteExpense = useCallback((expenseId: string) => {
+    if (!expensesRef) return;
+    deleteDocumentNonBlocking(doc(expensesRef, expenseId));
+  }, [expensesRef]);
+
   return {
     sellers,
     sales: salesByDate,
     combinedSalesData,
+    shopTotals: shopTotalsData || [],
+    expenses: expensesData || [],
     isLoaded,
     addSeller,
     updateSeller,
     addSale,
     updateSale,
     deleteSale,
-    markSalesAsPaid
+    markSalesAsPaid,
+    setShopTotal,
+    addExpense,
+    deleteExpense
   };
 }
