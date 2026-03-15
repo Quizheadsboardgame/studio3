@@ -33,7 +33,8 @@ import {
   Banknote,
   Send,
   FileText,
-  Download
+  Download,
+  ChevronRight
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -142,7 +143,6 @@ export default function Dashboard() {
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
-      if (profileId === 'staff') setProfileId('manager');
     }
   }, []);
 
@@ -302,9 +302,15 @@ export default function Dashboard() {
 
   const handleSellerSelect = (sellerId: string) => {
     setSelectedSellerId(sellerId);
-    setAuthenticatedSellerId(null);
-    setSellerPasswordInput("");
-    setIsSellerPasswordDialogOpen(true);
+    if (isManagerAuthenticated) {
+      // MANAGER OVERRIDE: Skip password if manager is logged in
+      setAuthenticatedSellerId(sellerId);
+      toast({ title: "Manager Override", description: `Accessing portal for ${sellers.find(s => s.id === sellerId)?.name}.` });
+    } else {
+      setAuthenticatedSellerId(null);
+      setSellerPasswordInput("");
+      setIsSellerPasswordDialogOpen(true);
+    }
   };
 
   const handleSellerPasswordSubmit = () => {
@@ -380,7 +386,7 @@ export default function Dashboard() {
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
-    // Header (Strictly Monochrome PDF)
+    // Header (Strictly Monochrome PDF for professionalism)
     doc.setFontSize(22);
     doc.setTextColor(0, 0, 0);
     doc.text("Newton's Collectables", 14, 20);
@@ -403,7 +409,7 @@ export default function Dashboard() {
     doc.text(`Report Date: ${selectedDate}`, 14, 48);
     doc.text(`Generated: ${format(new Date(), "PPP p")}`, 14, 53);
 
-    // Table (Black and White)
+    // Table (Black and White theme)
     const tableData = sellerDailySales.map(sale => [
       sale.cardName,
       `£${sale.price.toFixed(2)}`,
