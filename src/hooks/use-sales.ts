@@ -73,10 +73,17 @@ export function useSales(profileId: string) {
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || profileId !== 'manager') && !!user;
 
-  // Combine sales if manager
+  // Combine and normalize sales
+  // CRITICAL: Any sale with a negative price must have 0 commission. 
+  // We normalize here to handle legacy data or edge cases.
   const combinedSalesData = useMemo(() => {
-    const primary = (primarySalesData || []).map(s => ({ ...s, profileOrigin: profileId }));
-    const staff = (staffSalesData || []).map(s => ({ ...s, profileOrigin: 'staff' }));
+    const normalize = (s: Sale) => ({
+      ...s,
+      commission: s.price < 0 ? 0 : s.commission
+    });
+
+    const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: profileId }));
+    const staff = (staffSalesData || []).map(s => ({ ...normalize(s), profileOrigin: 'staff' }));
     return [...primary, ...staff];
   }, [primarySalesData, staffSalesData, profileId]);
 
@@ -141,7 +148,7 @@ export function useSales(profileId: string) {
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
     
-    // If price is negative (refund), commission is overridden to 0 as requested.
+    // If price is negative (refund), commission is strictly 0.
     const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
 
     const docRef = doc(salesRef);
