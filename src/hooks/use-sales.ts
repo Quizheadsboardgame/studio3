@@ -140,8 +140,10 @@ export function useSales(profileId: string) {
     
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
-    // Commission is 0 if price is negative
-    const commissionAmount = price < 0 ? 0 : (price * commissionPercentage) / 100;
+    
+    // If price is negative (refund), commission overrides to price itself 
+    // so that payout (price - commission) results in £0.
+    const commissionAmount = price < 0 ? price : (price * commissionPercentage) / 100;
 
     const docRef = doc(salesRef);
     const saleId = docRef.id;
@@ -165,8 +167,9 @@ export function useSales(profileId: string) {
       if (existingSale) {
         const seller = sellers.find(s => s.id === existingSale.sellerId);
         const commissionPercentage = seller?.defaultCommission || 0;
-        // Commission is 0 if price is negative
-        updatedFields.commission = updatedFields.price < 0 ? 0 : (updatedFields.price * commissionPercentage) / 100;
+        
+        // Match the logic in addSale: negative price results in payout of £0
+        updatedFields.commission = updatedFields.price < 0 ? updatedFields.price : (updatedFields.price * commissionPercentage) / 100;
       }
     }
 
