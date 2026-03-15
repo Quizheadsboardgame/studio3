@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -42,7 +43,8 @@ import {
   ArrowDownRight,
   Scale,
   TrendingDown,
-  Briefcase
+  Briefcase,
+  LayoutDashboard
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,7 +81,7 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, CartesianGrid, Legend } from "recharts";
 
-import { useSales, Seller, ShopTotal, Expense } from "@/hooks/use-sales";
+import { useSales, Seller, ShopTotal, Expense, Sale } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -253,7 +255,8 @@ export default function Dashboard() {
       expenses: totalExpenses,
       settlementsPaid: settlementsPaidToday,
       netProfit,
-      runningCashPosition
+      runningCashPosition,
+      totalDailyVolume: totalSellerGross // The running total of card sales logged today
     };
   }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
 
@@ -279,6 +282,7 @@ export default function Dashboard() {
       totalExpenses,
       totalCommission,
       totalInHouseRevenue,
+      totalSellerGross,
       netProfit,
       currentLiquidity,
       unpaidLiability: totalUnpaidLiability
@@ -556,11 +560,21 @@ export default function Dashboard() {
               <CardContent className="p-5 pt-0">
                 <div className="text-2xl font-black">£{financialSummary.intake.toFixed(2)}</div>
                 <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
-                  <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue
+                  <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue (Till Total)
                 </div>
               </CardContent>
             </Card>
             
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-5 pb-1">
+                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Running Sales</CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-0">
+                <div className="text-2xl font-black text-primary">£{financialSummary.totalDailyVolume.toFixed(2)}</div>
+                <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Sum of Logged Card Sales</div>
+              </CardContent>
+            </Card>
+
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-5 pb-1">
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle>
@@ -568,18 +582,6 @@ export default function Dashboard() {
               <CardContent className="p-5 pt-0">
                 <div className="text-2xl font-black text-green-600">£{financialSummary.netProfit.toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Liabilities & Costs</div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-5 pb-1">
-                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Paid Settlements Today</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-destructive">£{financialSummary.settlementsPaid.toFixed(2)}</div>
-                <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
-                  <ArrowDownRight className="w-2 h-2 text-destructive" /> Outflow recorded
-                </div>
               </CardContent>
             </Card>
 
@@ -930,14 +932,18 @@ export default function Dashboard() {
             <Scale className="w-6 h-6 text-primary" />
             <h2 className="text-2xl font-black uppercase tracking-tighter">Master Financial Ledger</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Recorded Sales</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalSellerGross.toFixed(2)}</div></CardContent>
+            </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Lifetime Shop Intake</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0"><div className="text-xl font-black">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total In-House Rev</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-blue-600">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total NC Commission</CardTitle></CardHeader>
