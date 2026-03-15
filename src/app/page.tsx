@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -33,7 +32,8 @@ import {
   Wallet,
   ArrowRightLeft,
   Banknote,
-  Send
+  Send,
+  Download
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -361,6 +361,33 @@ export default function Dashboard() {
         description: `Marked £${settlementBatch.total.toFixed(2)} as paid via ${method.toUpperCase()}.` 
       });
     }
+  };
+
+  const downloadSellerCSV = () => {
+    if (!authenticatedSellerId) return;
+    const seller = sellers.find(s => s.id === authenticatedSellerId);
+    if (!seller) return;
+
+    const headers = ["Date", "Card Name", "Gross Price", "Payout Status", "Payment Method", "Net Payout"];
+    const rows = sellerDailySales.map(sale => [
+      sale.saleDate,
+      sale.cardName,
+      sale.price.toFixed(2),
+      sale.payoutStatus || 'pending',
+      sale.paymentMethod || 'N/A',
+      (sale.price - (sale.commission || 0)).toFixed(2)
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `NC_Sales_${seller.name}_${selectedDate}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (!isLoaded || isUserLoading) {
@@ -902,6 +929,11 @@ export default function Dashboard() {
                    <Badge variant="secondary" className="px-4 py-1.5 rounded-lg bg-accent/10 text-accent font-black text-sm">
                     {selectedDate}
                   </Badge>
+                  {authenticatedSellerId && (
+                    <Button variant="outline" size="sm" className="h-10 rounded-xl gap-2 font-bold text-xs" onClick={downloadSellerCSV}>
+                      <Download className="w-3.5 h-3.5" /> Download Report
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>

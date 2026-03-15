@@ -1,0 +1,21 @@
+{
+  "name": "NC: Sales Tracker",
+  "short_name": "NC Tracker",
+  "description": "Professional Transaction Oversight for Newton's Collectables",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#214 63% 49%",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/nc-icon-192/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/nc-icon-512/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
