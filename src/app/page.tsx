@@ -24,7 +24,8 @@ import {
   TrendingUp,
   Sparkles,
   BarChart3,
-  LogOut
+  LogOut,
+  User
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,7 +71,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 
-type ProfileType = 'manager' | 'staff';
+type ProfileType = 'manager' | 'staff' | 'seller';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -93,7 +94,10 @@ export default function Dashboard() {
   const [passwordInput, setPasswordInput] = useState("");
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
 
-  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId);
+  // For the 'seller' profile
+  const [selectedSellerId, setSelectedSellerId] = useState<string>("");
+
+  const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,7 +123,7 @@ export default function Dashboard() {
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
       setIsManagerAuthenticated(true);
-      setProfileId('manager');
+      if (profileId === 'staff') setProfileId('manager');
     }
   }, []);
 
@@ -133,19 +137,33 @@ export default function Dashboard() {
     if (sellers.length > 0 && !entrySellerId) {
       setEntrySellerId(sellers[0].id);
     }
-  }, [sellers, entrySellerId]);
-
-  useEffect(() => {
-    if (sellers.length > 0 && activeTab !== "all" && !sellers.find(s => s.id === activeTab)) {
-      setActiveTab("all");
+    if (sellers.length > 0 && profileId === 'seller' && !selectedSellerId) {
+      setSelectedSellerId(sellers[0].id);
     }
-  }, [sellers, activeTab]);
+  }, [sellers, entrySellerId, selectedSellerId, profileId]);
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
 
   const allDailySales = useMemo(() => {
     return Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || ''));
   }, [dailySalesData]);
+
+  // Specific data for the individual seller view
+  const sellerDailySales = useMemo(() => {
+    if (profileId !== 'seller' || !selectedSellerId) return [];
+    return dailySalesData[selectedSellerId] || [];
+  }, [profileId, selectedSellerId, dailySalesData]);
+
+  const sellerStats = useMemo(() => {
+    const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
+    const comm = sellerDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    return {
+      total,
+      commission: comm,
+      payout: total - comm,
+      count: sellerDailySales.length
+    };
+  }, [sellerDailySales]);
 
   const chartData = useMemo(() => {
     return sellers.map(seller => {
@@ -182,69 +200,6 @@ export default function Dashboard() {
 
     return { totalSales, totalCommission, totalCards, topSellerName };
   }, [sellers, dailySalesData]);
-
-  const allTimeStats = useMemo(() => {
-    let totalSales = 0;
-    let totalCommission = 0;
-    let totalCards = 0;
-    const sellerTotals: Record<string, number> = {};
-
-    Object.values(sales).forEach((daySales) => {
-      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
-        const dayTotal = sellerSales.reduce((acc, s) => acc + s.price, 0);
-        const dayComm = sellerSales.reduce((acc, s) => acc + (s.commission || 0), 0);
-        totalSales += dayTotal;
-        totalCommission += dayComm;
-        totalCards += sellerSales.length;
-        sellerTotals[sellerId] = (sellerTotals[sellerId] || 0) + dayTotal;
-      });
-    });
-
-    let topSeller = "-";
-    let maxTotal = 0;
-    Object.entries(sellerTotals).forEach(([sellerId, total]) => {
-      if (total > maxTotal) {
-        maxTotal = total;
-        const seller = sellers.find(s => s.id === sellerId);
-        topSeller = seller ? seller.name : sellerId;
-      }
-    });
-
-    return { totalSales, totalCommission, totalCards, topSeller };
-  }, [sales, sellers]);
-
-  const recentActivity = useMemo(() => {
-    const all: { date: string; sellerName: string; card: string; price: number; commission: number; origin?: string }[] = [];
-    Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        const name = seller ? seller.name : sellerId;
-        sellerSales.forEach((sale) => {
-          all.push({ date, sellerName: name, card: sale.cardName, price: sale.price, commission: sale.commission || 0, origin: sale.profileOrigin });
-        });
-      });
-    });
-    return all.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
-  }, [sales, sellers]);
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const results: { date: string; sellerName: string; card: string; price: number; commission: number; origin?: string }[] = [];
-    
-    Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        const name = seller ? seller.name : sellerId;
-        sellerSales.forEach((sale) => {
-          if (sale.cardName.toLowerCase().includes(searchQuery.toLowerCase())) {
-            results.push({ date, sellerName: name, card: sale.cardName, price: sale.price, commission: sale.commission || 0, origin: sale.profileOrigin });
-          }
-        });
-      });
-    });
-    
-    return results;
-  }, [sales, searchQuery, sellers]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -298,52 +253,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleExportCSV = () => {
-    const rows = [["Date", "Seller", "Card", "Price", "Commission", "Origin"]];
-    Object.entries(sales).forEach(([date, daySales]) => {
-      Object.entries(daySales).forEach(([sellerId, sellerSales]) => {
-        const seller = sellers.find(s => s.id === sellerId);
-        const name = seller ? seller.name : sellerId;
-        sellerSales.forEach((sale) => {
-          rows.push([date, name, sale.cardName, sale.price.toString(), (sale.commission || 0).toString(), sale.profileOrigin || '']);
-        });
-      });
-    });
-
-    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `nc_tracker_${profileId}_vault.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const startEditing = (sale: Sale) => {
-    if (!sale.id) return;
-    setEditingSaleId(sale.id);
-    setEditCard(sale.cardName);
-    setEditPrice(sale.price.toString());
-  };
-
-  const cancelEditing = () => {
-    setEditingSaleId(null);
-    setEditCard("");
-    setEditPrice("");
-  };
-
-  const handleUpdateSale = (saleId: string, origin?: string) => {
-    const priceNum = parseFloat(editPrice);
-    if (editCard.trim() && !isNaN(priceNum)) {
-      updateSale(saleId, { 
-        cardName: editCard.trim(), 
-        price: priceNum
-      }, origin);
-      cancelEditing();
-    }
-  };
-
   const handleAddSale = () => {
     const priceNum = parseFloat(newSalePrice);
     if (entrySellerId && newSaleCard.trim() && !isNaN(priceNum)) {
@@ -380,7 +289,7 @@ export default function Dashboard() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="rounded-xl gap-2 shadow-sm border-primary/20 bg-card hover:bg-primary/5 transition-all h-11 px-6">
-                {profileId === 'manager' ? <ShieldCheck className="w-4 h-4 text-primary" /> : <UserCircle className="w-4 h-4 text-muted-foreground" />}
+                {profileId === 'manager' ? <ShieldCheck className="w-4 h-4 text-primary" /> : profileId === 'seller' ? <User className="w-4 h-4 text-accent" /> : <UserCircle className="w-4 h-4 text-muted-foreground" />}
                 <span className="font-bold">Vault: {profileId.charAt(0).toUpperCase() + profileId.slice(1)}</span>
               </Button>
             </DropdownMenuTrigger>
@@ -399,6 +308,13 @@ export default function Dashboard() {
                 <div className="flex flex-col">
                   <span className="font-bold text-muted-foreground">Staff Vault</span>
                   <span className="text-[10px] text-muted-foreground font-medium">Daily logging access</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 cursor-pointer py-3 rounded-lg focus:bg-accent/10 transition-colors">
+                <User className="w-5 h-5 text-accent" /> 
+                <div className="flex flex-col">
+                  <span className="font-bold">Seller Portal</span>
+                  <span className="text-[10px] text-muted-foreground font-medium">Individual sales review</span>
                 </div>
               </DropdownMenuItem>
               {isManagerAuthenticated && (
@@ -422,10 +338,6 @@ export default function Dashboard() {
               onChange={(e) => setSelectedDate(e.target.value)}
             />
           </div>
-          
-          <Button onClick={handleExportCSV} variant="secondary" className="rounded-xl h-11 gap-2 shadow-sm font-bold bg-white hover:bg-muted transition-all border border-black/5">
-            <Download className="w-4 h-4" /> Export
-          </Button>
         </div>
       </header>
 
@@ -551,6 +463,44 @@ export default function Dashboard() {
         </div>
       )}
 
+      {profileId === 'seller' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4 duration-700">
+           <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-primary" /> Your Gross Sales
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-3xl font-black text-primary">£{sellerStats.total.toFixed(2)}</div>
+              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Across {sellerStats.count} items sold</p>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-lg bg-emerald-50 rounded-2xl ring-1 ring-emerald-500/10 group hover:ring-emerald-500/30 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
+                <Coins className="w-3.5 h-3.5" /> Your Payout
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-3xl font-black text-emerald-700">£{sellerStats.payout.toFixed(2)}</div>
+              <p className="text-[10px] font-bold text-emerald-600/50 mt-1">Estimated earnings for {selectedDate}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-lg bg-card rounded-2xl group hover:ring-2 ring-primary/20 transition-all">
+            <CardHeader className="p-5 pb-2">
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-muted-foreground/70 flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-primary" /> Commission Cut
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 pt-0">
+              <div className="text-3xl font-black text-muted-foreground">£{sellerStats.commission.toFixed(2)}</div>
+              <p className="text-[10px] font-bold text-muted-foreground/50 mt-1">Management fee contribution</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Card className="shadow-2xl border-none overflow-hidden rounded-2xl ring-1 ring-black/5 animate-in slide-in-from-bottom-8 duration-1000">
         {profileId === 'staff' ? (
           <>
@@ -666,14 +616,81 @@ export default function Dashboard() {
                   </TableBody>
                 </Table>
               </div>
-
-              <div className="flex justify-end pt-4">
-                <div className="bg-primary shadow-2xl shadow-primary/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center transform hover:scale-[1.02] transition-transform">
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Aggregate Ledger Total</span>
-                    <span className="text-4xl font-black">£{dailyStats.totalSales.toFixed(2)}</span>
+            </CardContent>
+          </>
+        ) : profileId === 'seller' ? (
+          <>
+            <CardHeader className="border-b bg-muted/20 px-8 py-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="bg-accent/10 p-2 rounded-xl">
+                    <User className="w-5 h-5 text-accent" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-black">Personal Sales Review</CardTitle>
+                    <p className="text-xs text-muted-foreground font-medium">Tracking your individual performance & payouts</p>
                   </div>
                 </div>
+                <div className="flex items-center gap-3">
+                   <div className="w-48">
+                      <Select value={selectedSellerId} onValueChange={setSelectedSellerId}>
+                        <SelectTrigger className="bg-card shadow-sm border-accent/20 h-10 rounded-xl px-4 font-bold text-xs">
+                          <SelectValue placeholder="Identify yourself..." />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          {sellers.map((s) => (
+                            <SelectItem key={s.id} value={s.id} className="font-bold text-xs">
+                              {s.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                   </div>
+                   <Badge variant="secondary" className="px-4 py-1.5 rounded-lg bg-accent/10 text-accent font-black text-sm">
+                    {selectedDate}
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-8 space-y-6">
+              <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
+                <Table>
+                  <TableHeader className="bg-muted/30">
+                    <TableRow className="border-none hover:bg-transparent">
+                      <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Card Detail</TableHead>
+                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Gross Sale</TableHead>
+                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Comm. Cut</TableHead>
+                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14 pr-6">Your Payout</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sellerDailySales.length > 0 ? (
+                      sellerDailySales.map((sale) => (
+                        <TableRow key={sale.id} className="hover:bg-accent/[0.02] border-muted/30 group transition-all duration-300">
+                          <TableCell className="pl-6 h-16 font-bold text-foreground/90">{sale.cardName}</TableCell>
+                          <TableCell className="text-right font-black text-primary">£{sale.price.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-black text-muted-foreground/60">£{(sale.commission || 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-right pr-6 font-black text-emerald-600">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-48 text-center text-muted-foreground/60 italic font-medium">
+                          No personal records found for this date.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                 <div className="bg-accent shadow-2xl shadow-accent/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
+                    <div className="flex flex-col items-center">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Net Daily Payout</span>
+                      <span className="text-4xl font-black">£{sellerStats.payout.toFixed(2)}</span>
+                    </div>
+                  </div>
               </div>
             </CardContent>
           </>
@@ -769,16 +786,29 @@ export default function Dashboard() {
                                 <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                   {isEditing ? (
                                     <>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => {
+                                        const priceNum = parseFloat(editPrice);
+                                        if (editCard.trim() && !isNaN(priceNum)) {
+                                          updateSale(sale.id!, { 
+                                            cardName: editCard.trim(), 
+                                            price: priceNum
+                                          }, sale.profileOrigin);
+                                          setEditingSaleId(null);
+                                        }
+                                      }}>
                                         <Check className="w-4 h-4" />
                                       </Button>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={cancelEditing}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={() => setEditingSaleId(null)}>
                                         <X className="w-4 h-4" />
                                       </Button>
                                     </>
                                   ) : (
                                     <>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => startEditing(sale)}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => {
+                                        setEditingSaleId(sale.id!);
+                                        setEditCard(sale.cardName);
+                                        setEditPrice(sale.price.toString());
+                                      }}>
                                         <Pencil className="w-4 h-4" />
                                       </Button>
                                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
@@ -800,31 +830,6 @@ export default function Dashboard() {
                       )}
                     </TableBody>
                   </Table>
-                </div>
-
-                <div className="flex flex-col md:flex-row justify-end pt-6 gap-6">
-                  {isManagerAuthenticated && (
-                    <div className="flex flex-col gap-3 bg-emerald-50 border border-emerald-100 px-8 py-6 rounded-3xl shadow-sm">
-                      <div className="flex justify-between items-center gap-12">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                           <Activity className="w-3 h-3" /> Total Shared Commissions
-                        </span>
-                        <span className="text-2xl font-black text-emerald-700">£{dailyStats.totalCommission.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center gap-12 border-t border-emerald-200 pt-3">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                           <CreditCard className="w-3 h-3" /> Net Seller Disbursement
-                        </span>
-                        <span className="text-2xl font-black text-emerald-900">£{(dailyStats.totalSales - dailyStats.totalCommission).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="bg-primary shadow-2xl shadow-primary/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center transform hover:scale-[1.02] transition-transform">
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Aggregate Daily Gross</span>
-                      <span className="text-4xl font-black">£{dailyStats.totalSales.toFixed(2)}</span>
-                    </div>
-                  </div>
                 </div>
               </TabsContent>
 
@@ -895,16 +900,29 @@ export default function Dashboard() {
                                       <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                         {isEditing ? (
                                           <>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateSale(sale.id!, sale.profileOrigin)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => {
+                                                const priceNum = parseFloat(editPrice);
+                                                if (editCard.trim() && !isNaN(priceNum)) {
+                                                  updateSale(sale.id!, { 
+                                                    cardName: editCard.trim(), 
+                                                    price: priceNum
+                                                  }, sale.profileOrigin);
+                                                  setEditingSaleId(null);
+                                                }
+                                            }}>
                                               <Check className="w-4 h-4" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={cancelEditing}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-muted rounded-lg" onClick={() => setEditingSaleId(null)}>
                                               <X className="w-4 h-4" />
                                             </Button>
                                           </>
                                         ) : (
                                           <>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => startEditing(sale)}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-lg" onClick={() => {
+                                                setEditingSaleId(sale.id!);
+                                                setEditCard(sale.cardName);
+                                                setEditPrice(sale.price.toString());
+                                            }}>
                                               <Pencil className="w-4 h-4" />
                                             </Button>
                                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded-lg" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
@@ -927,31 +945,6 @@ export default function Dashboard() {
                           </TableBody>
                         </Table>
                       </div>
-                      
-                      <div className="flex flex-col md:flex-row justify-end gap-6">
-                        {isManagerAuthenticated && (
-                          <div className="flex flex-col gap-3 bg-emerald-50 border border-emerald-100 px-8 py-6 rounded-3xl shadow-sm">
-                            <div className="flex justify-between items-center gap-12">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                                 <TrendingUp className="w-3 h-3" /> Total Earned Cut
-                              </span>
-                              <span className="text-2xl font-black text-emerald-700">£{sellerDailyComm.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between items-center gap-12 border-t border-emerald-200 pt-3">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70 flex items-center gap-2">
-                                 <CreditCard className="w-3 h-3" /> Seller Payout Run-down
-                              </span>
-                              <span className="text-2xl font-black text-emerald-900">£{sellerPayout.toFixed(2)}</span>
-                            </div>
-                          </div>
-                        )}
-                        <div className="bg-primary shadow-2xl shadow-primary/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
-                          <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Seller Daily Gross</span>
-                            <span className="text-4xl font-black">£{sellerDailyTotal.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </TabsContent>
                 );
@@ -967,35 +960,6 @@ export default function Dashboard() {
             <div className="bg-emerald-100 p-2 rounded-xl"><Coins className="w-5 h-5 text-emerald-600" /></div>
             NC Shared Vault Analytics ({profileId})
           </h3>
-          
-          {profileId === 'manager' && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
-                <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault Value</CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 pt-0">
-                  <div className="text-2xl font-black text-emerald-700">£{allTimeStats.totalSales.toFixed(2)}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-xl bg-emerald-100/50 rounded-2xl ring-1 ring-emerald-500/20 hover:ring-emerald-500/40 transition-all">
-                <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-800/70">Global Comm.</CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 pt-0">
-                  <div className="text-2xl font-black text-emerald-800">£{allTimeStats.totalCommission.toFixed(2)}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-xl bg-emerald-50/50 rounded-2xl ring-1 ring-emerald-500/10 hover:ring-emerald-500/30 transition-all">
-                <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-emerald-700/70">Vault MVP</CardTitle>
-                </CardHeader>
-                <CardContent className="p-5 pt-0">
-                  <div className="text-xl font-black text-emerald-700 truncate">{allTimeStats.topSeller}</div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
 
           <Card className="shadow-2xl border-none h-[400px] rounded-3xl ring-1 ring-black/5 overflow-hidden">
             <CardHeader className="pb-4 bg-muted/10 border-b">
@@ -1008,26 +972,23 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[320px] p-6">
-                {recentActivity.length > 0 ? (
+                {(profileId === 'seller' ? sellerDailySales : allDailySales).length > 0 ? (
                   <div className="space-y-4">
-                    {recentActivity.map((act, i) => (
+                    {(profileId === 'seller' ? sellerDailySales : allDailySales).map((act, i) => (
                       <div key={i} className="flex justify-between items-center text-sm bg-muted/20 p-4 rounded-2xl border border-black/5 hover:bg-white hover:shadow-md transition-all duration-300">
                         <div className="space-y-1.5">
-                          <div className="font-black text-foreground/90">{act.card}</div>
+                          <div className="font-black text-foreground/90">{act.cardName}</div>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-tighter py-0 px-2 bg-muted/80">
-                              {act.sellerName}
+                              {sellers.find(s => s.id === act.sellerId)?.name || act.sellerId}
                             </Badge>
-                            <span className="text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">{act.date}</span>
-                            {act.origin === 'staff' && isManagerAuthenticated && (
-                              <Badge variant="outline" className="text-[8px] font-black text-primary/70 bg-primary/5 px-1 rounded-sm border-primary/20 uppercase tracking-tighter">Staff Log</Badge>
-                            )}
+                            <span className="text-[9px] font-black text-muted-foreground/60 uppercase tracking-widest">{act.saleDate}</span>
                           </div>
                         </div>
                         <div className="flex flex-col items-end">
                            <div className="font-black text-primary text-base">£{act.price.toFixed(2)}</div>
-                           {isManagerAuthenticated && act.commission > 0 && (
-                             <div className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">+£{act.commission.toFixed(2)} comm</div>
+                           {profileId === 'seller' && (
+                             <div className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">£{(act.price - (act.commission || 0)).toFixed(2)} payout</div>
                            )}
                         </div>
                       </div>
@@ -1063,20 +1024,19 @@ export default function Dashboard() {
               </div>
               {searchQuery && (
                 <ScrollArea className="mt-6 h-[250px] border-none bg-muted/10 rounded-2xl shadow-inner p-4">
-                  {searchResults.length > 0 ? (
+                  {allDailySales.filter(s => s.cardName.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
                     <div className="space-y-3">
-                      {searchResults.map((res, i) => (
+                      {allDailySales.filter(s => s.cardName.toLowerCase().includes(searchQuery.toLowerCase())).map((res, i) => (
                         <div key={i} className="text-sm space-y-3 bg-white p-5 rounded-2xl shadow-sm border border-black/5 transition-all hover:scale-[1.01] hover:shadow-lg">
                           <div className="flex justify-between items-center">
-                            <span className="text-primary font-black text-lg tracking-tight">{res.card}</span>
+                            <span className="text-primary font-black text-lg tracking-tight">{res.cardName}</span>
                             <div className="text-right">
                                <div className="text-primary font-black text-base">£{res.price.toFixed(2)}</div>
-                               {isManagerAuthenticated && res.commission > 0 && <div className="text-[9px] font-black text-emerald-600 uppercase">£{res.commission.toFixed(2)} Comm</div>}
                             </div>
                           </div>
                           <div className="text-[9px] font-black text-muted-foreground flex justify-between uppercase tracking-widest border-t pt-2 opacity-70">
-                            <span>Sold by {res.sellerName} {res.origin === 'staff' && '(Staff Entry)'}</span>
-                            <span>{res.date}</span>
+                            <span>Sold by {sellers.find(s => s.id === res.sellerId)?.name || res.sellerId}</span>
+                            <span>{res.saleDate}</span>
                           </div>
                         </div>
                       ))}
@@ -1183,8 +1143,6 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
-
-      <Separator className="bg-black/5 h-[1px]" />
 
       <footer className="py-8 text-center">
         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">&copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Enterprise Shared Vault v2.5</p>
