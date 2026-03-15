@@ -404,6 +404,7 @@ export default function Dashboard() {
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
     const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
+    const payoutDate = format(addDays(parseISO(selectedDate), 13), "EEEE, do MMMM yyyy");
 
     doc.setFontSize(22);
     doc.text("Newton's Collectables", 14, 20);
@@ -412,6 +413,7 @@ export default function Dashboard() {
     doc.line(14, 33, 196, 33);
     doc.text(`Seller: ${seller.name}`, 14, 43);
     doc.text(`Report Date: ${formattedDate}`, 14, 48);
+    doc.text(`Estimated Payout Date: ${payoutDate}`, 14, 53);
 
     autoTable(doc, {
       startY: 63,
