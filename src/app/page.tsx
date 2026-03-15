@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -41,7 +40,9 @@ import {
   Receipt,
   ArrowUpRight,
   ArrowDownRight,
-  Scale
+  Scale,
+  TrendingDown,
+  Briefcase
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -246,6 +247,41 @@ export default function Dashboard() {
     };
   }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate]);
 
+  // Global Ledger Tally (All-time P&L)
+  const globalAudit = useMemo(() => {
+    if (profileId !== 'manager') return null;
+
+    const totalIntake = shopTotals.reduce((acc, t) => acc + t.totalIntake, 0);
+    const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+    const totalCommission = combinedSalesData.reduce((acc, s) => acc + (s.commission || 0), 0);
+    
+    // Total gross from all sellers ever recorded
+    const totalSellerGross = combinedSalesData.reduce((acc, s) => acc + s.price, 0);
+    // In-house revenue is any intake not attributed to seller gross price
+    const totalInHouseRevenue = Math.max(0, totalIntake - totalSellerGross);
+    
+    const totalPaidSettlements = combinedSalesData.reduce((acc, s) => {
+      return s.payoutStatus === 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
+    }, 0);
+
+    const totalUnpaidLiability = combinedSalesData.reduce((acc, s) => {
+      return s.payoutStatus !== 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
+    }, 0);
+
+    const netProfit = totalInHouseRevenue + totalCommission - totalExpenses;
+    const currentLiquidity = totalIntake - totalExpenses - totalPaidSettlements;
+
+    return {
+      totalIntake,
+      totalExpenses,
+      totalCommission,
+      totalInHouseRevenue,
+      netProfit,
+      currentLiquidity,
+      unpaidLiability: totalUnpaidLiability
+    };
+  }, [profileId, shopTotals, expenses, combinedSalesData]);
+
   const chartData = useMemo(() => {
     if (!financialSummary) return [];
     return [{
@@ -294,6 +330,11 @@ export default function Dashboard() {
 
     return forecast;
   }, [combinedSalesData, sellers, profileId]);
+
+  const predictedFridayPosition = useMemo(() => {
+    if (!globalAudit || !payoutForecast) return 0;
+    return globalAudit.currentLiquidity - payoutForecast.thisFriday.total;
+  }, [globalAudit, payoutForecast]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -771,49 +812,132 @@ export default function Dashboard() {
 
       {/* Payout Forecasting (Manager Only) */}
       {profileId === 'manager' && payoutForecast && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-6 duration-1000">
-           {[
-             { batch: payoutForecast.thisFriday, title: "This Friday", icon: ArrowRightLeft, color: "primary" },
-             { batch: payoutForecast.nextFriday, title: "Next Friday", icon: Clock, color: "slate-200" }
-           ].map((item, idx) => (
-             <Card key={idx} className={`shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-${item.color}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in slide-in-from-bottom-6 duration-1000">
+           <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-primary">
                <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="bg-primary text-white p-2 rounded-xl"><item.icon className="w-4 h-4" /></div>
+                    <div className="bg-primary text-white p-2 rounded-xl"><ArrowRightLeft className="w-4 h-4" /></div>
                     <div>
-                      <CardTitle className="text-lg font-black uppercase">{item.title}</CardTitle>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(item.batch.date, "PPP")}</p>
+                      <CardTitle className="text-lg font-black uppercase">This Friday</CardTitle>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-black">£{item.batch.total.toFixed(2)}</span>
+                    <span className="text-2xl font-black">£{payoutForecast.thisFriday.total.toFixed(2)}</span>
                   </div>
                </CardHeader>
                <CardContent className="p-6 space-y-3">
-                  {Object.entries(item.batch.sellers).map(([name, data], i) => (
-                    <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all">
-                      <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
-                        <Button 
-                          size="sm" 
-                          className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => {
-                            setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
-                            setIsSettlementDialogOpen(true);
-                          }}
-                        >
-                          Settle
-                        </Button>
+                  <ScrollArea className="h-[200px]">
+                    {Object.entries(payoutForecast.thisFriday.sellers).map(([name, data], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                        <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
+                          <Button 
+                            size="sm" 
+                            className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
+                              setIsSettlementDialogOpen(true);
+                            }}
+                          >
+                            Settle
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {item.batch.count === 0 && (
-                    <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>
-                  )}
+                    ))}
+                    {payoutForecast.thisFriday.count === 0 && (
+                      <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>
+                    )}
+                  </ScrollArea>
                </CardContent>
-             </Card>
-           ))}
+            </Card>
+
+            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-slate-200">
+               <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-slate-400 text-white p-2 rounded-xl"><Clock className="w-4 h-4" /></div>
+                    <div>
+                      <CardTitle className="text-lg font-black uppercase">Next Friday</CardTitle>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-black">£{payoutForecast.nextFriday.total.toFixed(2)}</span>
+                  </div>
+               </CardHeader>
+               <CardContent className="p-6 space-y-3">
+                  <ScrollArea className="h-[200px]">
+                    {Object.entries(payoutForecast.nextFriday.sellers).map(([name, data], i) => (
+                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                        <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
+                        <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {payoutForecast.nextFriday.count === 0 && (
+                      <p className="text-center text-[10px] italic text-slate-400 py-4">No upcoming settlements</p>
+                    )}
+                  </ScrollArea>
+               </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-green-500">
+               <CardHeader className="bg-white/5 px-6 py-4 border-b border-white/10 flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-green-500 text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
+                    <div>
+                      <CardTitle className="text-lg font-black uppercase">Friday Prediction</CardTitle>
+                      <p className="text-[10px] text-white/40 font-bold uppercase">Estimated Cash Balance</p>
+                    </div>
+                  </div>
+               </CardHeader>
+               <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
+                  <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
+                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-green-400'}`}>
+                    £{predictedFridayPosition.toFixed(2)}
+                  </div>
+                  <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
+                    Based on current Running Liquidity minus This Friday's Liabilities
+                  </p>
+               </CardContent>
+            </Card>
+        </div>
+      )}
+
+      {/* Global Master Ledger Audit (Manager Only) */}
+      {profileId === 'manager' && globalAudit && (
+        <div className="animate-in slide-in-from-bottom-8 duration-1000 delay-300">
+          <Separator className="my-12" />
+          <div className="flex items-center gap-3 mb-8">
+            <Scale className="w-6 h-6 text-primary" />
+            <h2 className="text-2xl font-black uppercase tracking-tighter">Master Financial Ledger</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Lifetime Shop Intake</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
+            </Card>
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total In-House Rev</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent>
+            </Card>
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total NC Commission</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-green-600">£{globalAudit.totalCommission.toFixed(2)}</div></CardContent>
+            </Card>
+            <Card className="border-none shadow-sm rounded-2xl bg-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Operational Expenses</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-destructive">£{globalAudit.totalExpenses.toFixed(2)}</div></CardContent>
+            </Card>
+            <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white">
+              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Total Global P&L</CardTitle></CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className={`text-xl font-black ${globalAudit.netProfit < 0 ? 'text-destructive' : 'text-green-400'}`}>
+                  £{globalAudit.netProfit.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
