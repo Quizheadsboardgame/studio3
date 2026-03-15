@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -25,7 +26,10 @@ import {
   Sparkles,
   BarChart3,
   LogOut,
-  User
+  User,
+  KeyRound,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,8 +98,12 @@ export default function Dashboard() {
   const [passwordInput, setPasswordInput] = useState("");
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState(false);
 
-  // For the 'seller' profile
+  // For the 'seller' profile security
   const [selectedSellerId, setSelectedSellerId] = useState<string>("");
+  const [isSellerPasswordDialogOpen, setIsSellerPasswordDialogOpen] = useState(false);
+  const [sellerPasswordInput, setSellerPasswordInput] = useState("");
+  const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
+  const [showSellerPasswords, setShowSellerPasswords] = useState(false);
 
   const { sellers, sales, isLoaded, addSeller, removeSeller, addSale, deleteSale, updateSale } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
@@ -137,10 +145,7 @@ export default function Dashboard() {
     if (sellers.length > 0 && !entrySellerId) {
       setEntrySellerId(sellers[0].id);
     }
-    if (sellers.length > 0 && profileId === 'seller' && !selectedSellerId) {
-      setSelectedSellerId(sellers[0].id);
-    }
-  }, [sellers, entrySellerId, selectedSellerId, profileId]);
+  }, [sellers, entrySellerId]);
 
   const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
 
@@ -150,9 +155,9 @@ export default function Dashboard() {
 
   // Specific data for the individual seller view
   const sellerDailySales = useMemo(() => {
-    if (profileId !== 'seller' || !selectedSellerId) return [];
-    return dailySalesData[selectedSellerId] || [];
-  }, [profileId, selectedSellerId, dailySalesData]);
+    if (profileId !== 'seller' || !authenticatedSellerId) return [];
+    return dailySalesData[authenticatedSellerId] || [];
+  }, [profileId, authenticatedSellerId, dailySalesData]);
 
   const sellerStats = useMemo(() => {
     const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
@@ -207,6 +212,10 @@ export default function Dashboard() {
       return;
     }
     setProfileId(newProfile);
+    if (newProfile !== 'seller') {
+      setAuthenticatedSellerId(null);
+      setSelectedSellerId("");
+    }
   };
 
   const handleLogout = () => {
@@ -227,6 +236,24 @@ export default function Dashboard() {
       toast({ title: "Authenticated", description: "Manager session active for 24 hours." });
     } else {
       toast({ variant: "destructive", title: "Access Denied", description: "Incorrect password." });
+    }
+  };
+
+  const handleSellerSelect = (sellerId: string) => {
+    setSelectedSellerId(sellerId);
+    setAuthenticatedSellerId(null);
+    setSellerPasswordInput("");
+    setIsSellerPasswordDialogOpen(true);
+  };
+
+  const handleSellerPasswordSubmit = () => {
+    const seller = sellers.find(s => s.id === selectedSellerId);
+    if (seller && seller.password === sellerPasswordInput) {
+      setAuthenticatedSellerId(selectedSellerId);
+      setIsSellerPasswordDialogOpen(false);
+      toast({ title: "Vault Unlocked", description: `Welcome back, ${seller.name}.` });
+    } else {
+      toast({ variant: "destructive", title: "Access Denied", description: "Incorrect access key." });
     }
   };
 
@@ -463,7 +490,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {profileId === 'seller' && (
+      {profileId === 'seller' && authenticatedSellerId && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-4 duration-700">
            <Card className="border-none shadow-lg bg-card rounded-2xl overflow-hidden group hover:ring-2 ring-primary/20 transition-all">
             <CardHeader className="p-5 pb-2">
@@ -633,7 +660,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-3">
                    <div className="w-48">
-                      <Select value={selectedSellerId} onValueChange={setSelectedSellerId}>
+                      <Select value={selectedSellerId} onValueChange={handleSellerSelect}>
                         <SelectTrigger className="bg-card shadow-sm border-accent/20 h-10 rounded-xl px-4 font-bold text-xs">
                           <SelectValue placeholder="Identify yourself..." />
                         </SelectTrigger>
@@ -653,45 +680,59 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
-              <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow className="border-none hover:bg-transparent">
-                      <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Card Detail</TableHead>
-                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Gross Sale</TableHead>
-                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Comm. Cut</TableHead>
-                      <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14 pr-6">Your Payout</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sellerDailySales.length > 0 ? (
-                      sellerDailySales.map((sale) => (
-                        <TableRow key={sale.id} className="hover:bg-accent/[0.02] border-muted/30 group transition-all duration-300">
-                          <TableCell className="pl-6 h-16 font-bold text-foreground/90">{sale.cardName}</TableCell>
-                          <TableCell className="text-right font-black text-primary">£{sale.price.toFixed(2)}</TableCell>
-                          <TableCell className="text-right font-black text-muted-foreground/60">£{(sale.commission || 0).toFixed(2)}</TableCell>
-                          <TableCell className="text-right pr-6 font-black text-emerald-600">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+              {authenticatedSellerId ? (
+                <>
+                  <div className="border rounded-2xl overflow-hidden bg-card shadow-sm ring-1 ring-black/5">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow className="border-none hover:bg-transparent">
+                          <TableHead className="font-black uppercase tracking-widest text-[10px] h-14 pl-6">Card Detail</TableHead>
+                          <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Gross Sale</TableHead>
+                          <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14">Comm. Cut</TableHead>
+                          <TableHead className="text-right font-black uppercase tracking-widest text-[10px] h-14 pr-6">Your Payout</TableHead>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-48 text-center text-muted-foreground/60 italic font-medium">
-                          No personal records found for this date.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex justify-end pt-4">
-                 <div className="bg-accent shadow-2xl shadow-accent/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Net Daily Payout</span>
-                      <span className="text-4xl font-black">£{sellerStats.payout.toFixed(2)}</span>
-                    </div>
+                      </TableHeader>
+                      <TableBody>
+                        {sellerDailySales.length > 0 ? (
+                          sellerDailySales.map((sale) => (
+                            <TableRow key={sale.id} className="hover:bg-accent/[0.02] border-muted/30 group transition-all duration-300">
+                              <TableCell className="pl-6 h-16 font-bold text-foreground/90">{sale.cardName}</TableCell>
+                              <TableCell className="text-right font-black text-primary">£{sale.price.toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-black text-muted-foreground/60">£{(sale.commission || 0).toFixed(2)}</TableCell>
+                              <TableCell className="text-right pr-6 font-black text-emerald-600">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-48 text-center text-muted-foreground/60 italic font-medium">
+                              No personal records found for this date.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
-              </div>
+
+                  <div className="flex justify-end pt-4">
+                     <div className="bg-accent shadow-2xl shadow-accent/30 px-10 py-6 rounded-3xl border border-white/10 text-white flex items-center justify-center">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Net Daily Payout</span>
+                          <span className="text-4xl font-black">£{sellerStats.payout.toFixed(2)}</span>
+                        </div>
+                      </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-24 text-center space-y-6">
+                  <div className="bg-accent/10 p-6 rounded-full">
+                    <Lock className="w-12 h-12 text-accent animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight">Identity Verification Required</h3>
+                    <p className="text-sm text-muted-foreground font-medium max-w-sm mx-auto">Please select your identity from the dropdown and provide your unique access key to view your sales performance.</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </>
         ) : (
@@ -1057,15 +1098,28 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" /> Active Entity Roster
                 </CardTitle>
-                {isManagerAuthenticated ? (
-                  <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-primary/20 bg-primary/5 text-primary py-1 px-3">
-                    <Settings2 className="w-3 h-3" /> Management Mode
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-muted/20 bg-muted/5 text-muted-foreground py-1 px-3">
-                    <Lock className="w-3 h-3" /> Encrypted View
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {isManagerAuthenticated && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10"
+                      onClick={() => setShowSellerPasswords(!showSellerPasswords)}
+                      title={showSellerPasswords ? "Hide Access Keys" : "Show Access Keys"}
+                    >
+                      {showSellerPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                  )}
+                  {isManagerAuthenticated ? (
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-primary/20 bg-primary/5 text-primary py-1 px-3">
+                      <Settings2 className="w-3 h-3" /> Management Mode
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest gap-2 border-muted/20 bg-muted/5 text-muted-foreground py-1 px-3">
+                      <Lock className="w-3 h-3" /> Encrypted View
+                    </Badge>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
@@ -1097,7 +1151,7 @@ export default function Dashboard() {
                         addSeller(newSellerName, parseFloat(newSellerCommission) || 0);
                         setNewSellerName("");
                         setNewSellerCommission("");
-                        toast({ title: "Success", description: "New entity added to shared roster." });
+                        toast({ title: "Success", description: "New entity provisioned with secure access key." });
                       }
                     }}
                   >
@@ -1117,7 +1171,14 @@ export default function Dashboard() {
                       <div className="flex flex-col items-start gap-1">
                         <span className="font-black text-sm tracking-tight">{s.name}</span>
                         {isManagerAuthenticated && (
-                          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">{(s.defaultCommission || 0)}% Commission</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">{(s.defaultCommission || 0)}% Commission</span>
+                            {showSellerPasswords && s.password && (
+                              <Badge variant="outline" className="text-[8px] h-4 font-black bg-primary/5 border-primary/20 text-primary px-1">
+                                KEY: {s.password}
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </div>
                       {isManagerAuthenticated && (
@@ -1148,6 +1209,7 @@ export default function Dashboard() {
         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">&copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Enterprise Shared Vault v2.5</p>
       </footer>
 
+      {/* Manager Authentication Dialog */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
@@ -1173,6 +1235,39 @@ export default function Dashboard() {
           <DialogFooter className="flex-col sm:flex-col gap-3">
             <Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl shadow-xl shadow-primary/30 font-black uppercase tracking-widest text-xs">Unlock Manager Vault</Button>
             <Button variant="ghost" onClick={() => setIsPasswordDialogOpen(false)} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Decline Access</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Seller Authentication Dialog */}
+      <Dialog open={isSellerPasswordDialogOpen} onOpenChange={setIsSellerPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[425px] rounded-3xl p-8 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center">
+            <div className="bg-accent/10 p-4 rounded-3xl mb-4">
+              <KeyRound className="w-8 h-8 text-accent" />
+            </div>
+            <DialogTitle className="text-2xl font-black tracking-tight">Identify Verification</DialogTitle>
+            <DialogDescription className="font-medium text-muted-foreground">
+              Enter your unique access key to unlock your personal revenue logs.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <Input
+              type="password"
+              placeholder="Enter access key..."
+              className="h-14 bg-muted/30 border-none rounded-2xl focus-visible:ring-accent/30 text-center font-black tracking-widest text-xl uppercase"
+              value={sellerPasswordInput}
+              onChange={(e) => setSellerPasswordInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSellerPasswordSubmit()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="flex-col sm:flex-col gap-3">
+            <Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl shadow-xl shadow-accent/30 bg-accent hover:bg-accent/90 text-white font-black uppercase tracking-widest text-xs">Unlock Payout Data</Button>
+            <Button variant="ghost" onClick={() => {
+              setIsSellerPasswordDialogOpen(false);
+              setSelectedSellerId("");
+            }} className="w-full rounded-2xl font-black text-muted-foreground/60 uppercase tracking-widest text-[10px]">Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

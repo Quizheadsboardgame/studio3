@@ -18,6 +18,10 @@
         "defaultCommission": {
           "type": "number",
           "description": "The default commission percentage (%) the manager earns per sale from this seller."
+        },
+        "password": {
+          "type": "string",
+          "description": "A secure access key for the seller to view their personal performance."
         }
       },
       "required": [

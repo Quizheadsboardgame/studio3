@@ -30,6 +30,7 @@ export type Seller = {
   id: string;
   name: string;
   defaultCommission?: number;
+  password?: string;
 };
 
 export function useSales(profileId: string) {
@@ -111,7 +112,16 @@ export function useSales(profileId: string) {
     
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
     const docRef = doc(targetRef, sellerId);
-    setDocumentNonBlocking(docRef, { id: sellerId, name, defaultCommission }, { merge: true });
+    
+    // Generate a random 6 character password for the seller
+    const randomPassword = Math.random().toString(36).slice(-6).toUpperCase();
+    
+    setDocumentNonBlocking(docRef, { 
+      id: sellerId, 
+      name, 
+      defaultCommission,
+      password: randomPassword 
+    }, { merge: true });
   }, [sellersRef, staffSellersRef, profileId]);
 
   const removeSeller = useCallback((sellerId: string) => {
