@@ -126,6 +126,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   
   const [profileId, setProfileId] = useState<ProfileType>('staff');
+  const [isMounted, setIsMounted] = useState(false);
   
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -172,6 +173,7 @@ export default function Dashboard() {
   const [expenseAmount, setExpenseAmount] = useState("");
 
   useEffect(() => {
+    setIsMounted(true);
     setSelectedDate(format(new Date(), "yyyy-MM-dd"));
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > new Date().getTime()) {
@@ -193,7 +195,7 @@ export default function Dashboard() {
     }
   }, [activeSellers, entrySellerId]);
 
-  const currentDayFinance = useMemo(() => shopTotals.find(t => t.date === selectedDate), [shopTotals, selectedDate]);
+  const currentDayFinance = useMemo(() => isMounted ? shopTotals.find(t => t.date === selectedDate) : null, [shopTotals, selectedDate, isMounted]);
   
   useEffect(() => {
     if (currentDayFinance) {
@@ -205,12 +207,13 @@ export default function Dashboard() {
     }
   }, [currentDayFinance, selectedDate]);
 
-  const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
-  const dailySalesData = useMemo(() => sales[selectedDate] || {}, [sales, selectedDate]);
+  const currentDayExpenses = useMemo(() => isMounted ? expenses.filter(e => e.date === selectedDate) : [], [expenses, selectedDate, isMounted]);
+  const dailySalesData = useMemo(() => isMounted ? (sales[selectedDate] || {}) : {}, [sales, selectedDate, isMounted]);
   const allDailySales = useMemo(() => Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || '')), [dailySalesData]);
   const sellerDailySales = useMemo(() => (profileId !== 'seller' || !authenticatedSellerId) ? [] : dailySalesData[authenticatedSellerId] || [], [profileId, authenticatedSellerId, dailySalesData]);
 
   const sellerStats = useMemo(() => {
+    if (!isMounted) return { total: 0, commission: 0, payout: 0, payoutDate: "N/A" };
     const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
     const comm = sellerDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
     return {
@@ -219,10 +222,10 @@ export default function Dashboard() {
       payout: total - comm,
       payoutDate: selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A"
     };
-  }, [sellerDailySales, selectedDate]);
+  }, [sellerDailySales, selectedDate, isMounted]);
 
   const financialSummary = useMemo(() => {
-    if (profileId !== 'manager') return null;
+    if (profileId !== 'manager' || !isMounted) return null;
 
     const totalSellerGross = allDailySales.reduce((acc, s) => acc + s.price, 0);
     const totalSellerCommission = allDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
@@ -252,10 +255,10 @@ export default function Dashboard() {
       netProfit,
       runningCashPosition
     };
-  }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate]);
+  }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
 
   const globalAudit = useMemo(() => {
-    if (profileId !== 'manager') return null;
+    if (profileId !== 'manager' || !isMounted) return null;
 
     const totalIntake = shopTotals.reduce((acc, t) => acc + t.totalIntake, 0);
     const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
@@ -280,20 +283,20 @@ export default function Dashboard() {
       currentLiquidity,
       unpaidLiability: totalUnpaidLiability
     };
-  }, [profileId, shopTotals, expenses, combinedSalesData]);
+  }, [profileId, shopTotals, expenses, combinedSalesData, isMounted]);
 
   const chartData = useMemo(() => {
-    if (!financialSummary) return [];
+    if (!financialSummary || !isMounted) return [];
     return [{
       name: format(parseISO(selectedDate), "MMM d"),
       inHouse: financialSummary.inHouseRevenue,
       commissions: financialSummary.sellerCommission,
       expenses: financialSummary.expenses
     }];
-  }, [financialSummary, selectedDate]);
+  }, [financialSummary, selectedDate, isMounted]);
 
   const payoutForecast = useMemo(() => {
-    if (profileId !== 'manager') return null;
+    if (profileId !== 'manager' || !isMounted) return null;
     const today = startOfDay(new Date());
     const thisFridayDate = startOfDay(nextFriday(today));
     const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
@@ -329,7 +332,7 @@ export default function Dashboard() {
     });
 
     return forecast;
-  }, [combinedSalesData, sellers, profileId]);
+  }, [combinedSalesData, sellers, profileId, isMounted]);
 
   const predictedFridayPosition = useMemo(() => {
     if (!globalAudit || !payoutForecast) return 0;
@@ -482,7 +485,7 @@ export default function Dashboard() {
     doc.save(`NC_Invoice_${invoiceNum}.pdf`);
   };
 
-  if (!isLoaded || isUserLoading) {
+  if (!isMounted || !isLoaded || isUserLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>;
   }
 
@@ -921,6 +924,7 @@ export default function Dashboard() {
       {/* Global Master Ledger Audit (Manager Only) */}
       {profileId === 'manager' && globalAudit && (
         <div className="animate-in slide-in-from-bottom-8 duration-1000 delay-300">
+          <span id="pnl-ledger" />
           <Separator className="my-12" />
           <div className="flex items-center gap-3 mb-8">
             <Scale className="w-6 h-6 text-primary" />
