@@ -403,13 +403,15 @@ export default function Dashboard() {
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
+    const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
+
     doc.setFontSize(22);
     doc.text("Newton's Collectables", 14, 20);
     doc.setFontSize(10);
     doc.text(`INVOICE #${invoiceNum}`, 196, 20, { align: 'right' });
     doc.line(14, 33, 196, 33);
     doc.text(`Seller: ${seller.name}`, 14, 43);
-    doc.text(`Report Date: ${selectedDate}`, 14, 48);
+    doc.text(`Report Date: ${formattedDate}`, 14, 48);
 
     autoTable(doc, {
       startY: 63,
@@ -865,7 +867,14 @@ export default function Dashboard() {
 
           {authenticatedSellerId && (
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-               <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase">Transaction Itemization</CardTitle></CardHeader>
+               <CardHeader className="p-8 border-b bg-slate-50/20">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-sm font-black uppercase">Transaction Itemization</CardTitle>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">
+                      Report Period: {format(parseISO(selectedDate), "EEEE, do MMMM yyyy")}
+                    </div>
+                  </div>
+               </CardHeader>
                <CardContent className="p-0">
                   <Table>
                     <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead><TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Net</TableHead></TableRow></TableHeader>
