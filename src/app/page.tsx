@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay, differenceInDays } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -37,6 +37,7 @@ import {
   Download,
   FileText
 } from "lucide-react";
+import Image from "next/image";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -79,6 +80,7 @@ import {
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 // PDF Generation
 import jsPDF from 'jspdf';
@@ -88,6 +90,7 @@ type ProfileType = 'manager' | 'staff' | 'seller';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
+const LEGAL_STATEMENT = "Newtons collectables is a trading names for journey together tcg Ltd company house number 16503957";
 
 const chartConfig = {
   total: {
@@ -375,25 +378,38 @@ export default function Dashboard() {
     if (!seller) return;
 
     const doc = new jsPDF();
+    const logo = PlaceHolderImages.find(img => img.id === 'app-logo');
 
-    // Header
+    // Generate Invoice Number (Base 1098 + days since Jan 1 2024)
+    const startDate = new Date(2024, 0, 1);
+    const invoiceNum = 1098 + differenceInDays(parseISO(selectedDate), startDate);
+
+    // Header with Logo
+    if (logo) {
+      doc.addImage(logo.imageUrl, 'JPEG', 14, 10, 40, 12);
+    }
+    
     doc.setFontSize(22);
     doc.setTextColor(37, 99, 235); // primary color
-    doc.text("Newton's Collectables", 14, 22);
+    doc.text("Newton's Collectables", 14, 30);
     
+    doc.setFontSize(10);
+    doc.setTextColor(150);
+    doc.text(`INVOICE #${invoiceNum}`, 196, 30, { align: 'right' });
+
     doc.setFontSize(12);
     doc.setTextColor(100);
-    doc.text("Official Sales & Payout Report", 14, 30);
+    doc.text("Official Sales & Payout Report", 14, 38);
     
     doc.setDrawColor(200);
-    doc.line(14, 35, 196, 35);
+    doc.line(14, 43, 196, 43);
 
     // Report Info
     doc.setFontSize(10);
     doc.setTextColor(0);
-    doc.text(`Seller Entity: ${seller.name}`, 14, 45);
-    doc.text(`Report Date: ${selectedDate}`, 14, 50);
-    doc.text(`Generated: ${format(new Date(), "PPP p")}`, 14, 55);
+    doc.text(`Seller Entity: ${seller.name}`, 14, 53);
+    doc.text(`Report Date: ${selectedDate}`, 14, 58);
+    doc.text(`Generated: ${format(new Date(), "PPP p")}`, 14, 63);
 
     // Table
     const tableData = sellerDailySales.map(sale => [
@@ -404,7 +420,7 @@ export default function Dashboard() {
     ]);
 
     autoTable(doc, {
-      startY: 65,
+      startY: 73,
       head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
       body: tableData,
       theme: 'striped',
@@ -443,8 +459,13 @@ export default function Dashboard() {
     doc.setTextColor(100);
     doc.text(`* Payout maturity date for this batch is scheduled for ${sellerStats.payoutDate}.`, 14, finalY + 45);
 
-    doc.save(`NC_Report_${seller.name}_${selectedDate}.pdf`);
-    toast({ title: "Report Generated", description: "PDF document saved to your device." });
+    // Legal Statement Footer
+    doc.setFontSize(7);
+    doc.setTextColor(150);
+    doc.text(LEGAL_STATEMENT, 14, 285);
+
+    doc.save(`NC_Invoice_${invoiceNum}_${seller.name}.pdf`);
+    toast({ title: "Invoice Generated", description: `PDF Invoice #${invoiceNum} saved.` });
   };
 
   if (!isLoaded || isUserLoading) {
@@ -458,14 +479,29 @@ export default function Dashboard() {
     );
   }
 
+  const logo = PlaceHolderImages.find(img => img.id === 'app-logo');
+
   return (
     <div className="min-h-screen p-4 md:p-8 space-y-8 max-w-7xl mx-auto transition-all duration-500 animate-in fade-in">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex flex-col">
-          <h1 className="text-3xl font-black tracking-tighter text-primary flex items-center gap-2">
-            <CreditCard className="w-8 h-8" />
-            NC: <span className="text-foreground">Sales Tracker</span>
-          </h1>
+          <div className="flex items-center gap-4 mb-2">
+            {logo && (
+              <div className="relative h-12 w-40">
+                <Image 
+                  src={logo.imageUrl} 
+                  alt={logo.description} 
+                  fill 
+                  className="object-contain"
+                  data-ai-hint={logo.imageHint}
+                />
+              </div>
+            )}
+            <Separator orientation="vertical" className="h-8 hidden md:block" />
+            <h1 className="text-3xl font-black tracking-tighter text-primary flex items-center gap-2">
+              NC: <span className="text-foreground">Sales Tracker</span>
+            </h1>
+          </div>
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 ml-1">Professional Transaction Oversight</p>
         </div>
 
@@ -988,7 +1024,7 @@ export default function Dashboard() {
                   </Badge>
                   {authenticatedSellerId && (
                     <Button variant="outline" size="sm" className="h-10 rounded-xl gap-2 font-black text-xs bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 transition-all" onClick={handleDownloadPDF}>
-                      <FileText className="w-3.5 h-3.5" /> Download PDF Report
+                      <FileText className="w-3.5 h-3.5" /> Download PDF Invoice
                     </Button>
                   )}
                 </div>
@@ -1438,8 +1474,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <footer className="py-8 text-center">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">&copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Enterprise Shared Vault v2.5</p>
+      <footer className="py-12 border-t mt-12 bg-muted/5">
+        <div className="max-w-7xl mx-auto px-4 text-center space-y-4">
+          <p className="text-xs font-bold text-muted-foreground/80 max-w-2xl mx-auto">
+            {LEGAL_STATEMENT}
+          </p>
+          <div className="flex items-center justify-center gap-6">
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
+              &copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Enterprise Shared Vault v2.6
+            </p>
+          </div>
+        </div>
       </footer>
 
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
