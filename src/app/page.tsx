@@ -114,12 +114,11 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-// Theme Definitions for different vaults
 const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
-  manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, // Deep Slate
-  staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   // Blue
-  seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  // Emerald
-  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   // Amber/Gold
+  manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, 
+  staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   
+  seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  
+  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   
 };
 
 export default function Dashboard() {
@@ -139,7 +138,7 @@ export default function Dashboard() {
   const [sellerPasswordInput, setSellerPasswordInput] = useState("");
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
 
-  const [showArchived, setShowArchived] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>("");
 
   const { 
     sellers, 
@@ -160,7 +159,6 @@ export default function Dashboard() {
     deleteExpense 
   } = useSales(profileId === 'seller' ? 'staff' : profileId);
   
-  const [selectedDate, setSelectedDate] = useState<string>("");
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
   const [entrySellerId, setEntrySellerId] = useState("");
@@ -168,7 +166,6 @@ export default function Dashboard() {
   const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
   const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
 
-  // Finance Inputs
   const [financeCash, setFinanceCash] = useState("");
   const [financeCard, setFinanceCard] = useState("");
   const [expenseDesc, setExpenseDesc] = useState("");
@@ -197,7 +194,10 @@ export default function Dashboard() {
     }
   }, [activeSellers, entrySellerId]);
 
-  const currentDayFinance = useMemo(() => isMounted ? shopTotals.find(t => t.date === selectedDate) : null, [shopTotals, selectedDate, isMounted]);
+  const currentDayFinance = useMemo(() => {
+    if (!isMounted || !selectedDate) return null;
+    return shopTotals.find(t => t.date === selectedDate) || null;
+  }, [shopTotals, selectedDate, isMounted]);
   
   useEffect(() => {
     if (currentDayFinance) {
@@ -207,12 +207,27 @@ export default function Dashboard() {
       setFinanceCash("");
       setFinanceCard("");
     }
-  }, [currentDayFinance, selectedDate]);
+  }, [currentDayFinance]);
 
-  const currentDayExpenses = useMemo(() => isMounted ? expenses.filter(e => e.date === selectedDate) : [], [expenses, selectedDate, isMounted]);
-  const dailySalesData = useMemo(() => isMounted ? (sales[selectedDate] || {}) : {}, [sales, selectedDate, isMounted]);
-  const allDailySales = useMemo(() => Object.values(dailySalesData).flat().sort((a, b) => (a.id || '').localeCompare(b.id || '')), [dailySalesData]);
-  const sellerDailySales = useMemo(() => (profileId !== 'seller' || !authenticatedSellerId) ? [] : dailySalesData[authenticatedSellerId] || [], [profileId, authenticatedSellerId, dailySalesData]);
+  const currentDayExpenses = useMemo(() => {
+    if (!isMounted || !selectedDate) return [];
+    return expenses.filter(e => e.date === selectedDate);
+  }, [expenses, selectedDate, isMounted]);
+
+  const dailySalesData = useMemo(() => {
+    if (!isMounted || !selectedDate) return {};
+    return sales[selectedDate] || {};
+  }, [sales, selectedDate, isMounted]);
+
+  const allDailySales = useMemo(() => {
+    const list = Object.values(dailySalesData).flat();
+    return list.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+  }, [dailySalesData]);
+
+  const sellerDailySales = useMemo(() => {
+    if (!profileId || !authenticatedSellerId || !dailySalesData) return [];
+    return dailySalesData[authenticatedSellerId] || [];
+  }, [profileId, authenticatedSellerId, dailySalesData]);
 
   const sellerStats = useMemo(() => {
     if (!isMounted) return { total: 0, commission: 0, payout: 0, payoutDate: "N/A" };
@@ -290,13 +305,17 @@ export default function Dashboard() {
   }, [profileId, shopTotals, expenses, combinedSalesData, isMounted]);
 
   const chartData = useMemo(() => {
-    if (!financialSummary || !isMounted) return [];
-    return [{
-      name: format(parseISO(selectedDate), "MMM d"),
-      inHouse: financialSummary.inHouseRevenue,
-      commissions: financialSummary.sellerCommission,
-      expenses: financialSummary.expenses
-    }];
+    if (!financialSummary || !isMounted || !selectedDate) return [];
+    try {
+      return [{
+        name: format(parseISO(selectedDate), "MMM d"),
+        inHouse: financialSummary.inHouseRevenue,
+        commissions: financialSummary.sellerCommission,
+        expenses: financialSummary.expenses
+      }];
+    } catch {
+      return [];
+    }
   }, [financialSummary, selectedDate, isMounted]);
 
   const payoutForecast = useMemo(() => {
@@ -312,26 +331,30 @@ export default function Dashboard() {
 
     combinedSalesData.forEach(sale => {
       if (sale.payoutStatus === 'paid') return;
-      const saleDateObj = parseISO(sale.saleDate);
-      const maturityDate = startOfDay(addDays(saleDateObj, 13));
-      const net = sale.price - (sale.commission || 0);
-      const seller = sellers.find(s => s.id === sale.sellerId);
-      const sellerName = seller?.name || sale.sellerId;
+      try {
+        const saleDateObj = parseISO(sale.saleDate);
+        const maturityDate = startOfDay(addDays(saleDateObj, 13));
+        const net = sale.price - (sale.commission || 0);
+        const seller = sellers.find(s => s.id === sale.sellerId);
+        const sellerName = seller?.name || sale.sellerId;
 
-      if (!isAfter(maturityDate, thisFridayDate)) {
-        forecast.thisFriday.total += net;
-        forecast.thisFriday.count += 1;
-        if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-        forecast.thisFriday.sellers[sellerName].total += net;
-        forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
-        forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
-      } else if (!isAfter(maturityDate, nextFridayDate)) {
-        forecast.nextFriday.total += net;
-        forecast.nextFriday.count += 1;
-        if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-        forecast.nextFriday.sellers[sellerName].total += net;
-        forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
-        forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
+        if (!isAfter(maturityDate, thisFridayDate)) {
+          forecast.thisFriday.total += net;
+          forecast.thisFriday.count += 1;
+          if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+          forecast.thisFriday.sellers[sellerName].total += net;
+          forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
+          forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
+        } else if (!isAfter(maturityDate, nextFridayDate)) {
+          forecast.nextFriday.total += net;
+          forecast.nextFriday.count += 1;
+          if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+          forecast.nextFriday.sellers[sellerName].total += net;
+          forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
+          forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
+        }
+      } catch {
+        // Skip invalid dates
       }
     });
 
@@ -340,7 +363,7 @@ export default function Dashboard() {
 
   const predictedFridayPosition = useMemo(() => {
     if (!globalAudit || !payoutForecast) return 0;
-    return globalAudit.currentLiquidity - payoutForecast.thisFriday.total;
+    return (globalAudit.currentLiquidity || 0) - (payoutForecast.thisFriday.total || 0);
   }, [globalAudit, payoutForecast]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
@@ -442,7 +465,7 @@ export default function Dashboard() {
   };
 
   const handleDownloadPDF = () => {
-    if (!authenticatedSellerId) return;
+    if (!authenticatedSellerId || !selectedDate) return;
     const seller = sellers.find(s => s.id === authenticatedSellerId);
     if (!seller) return;
 
@@ -451,42 +474,46 @@ export default function Dashboard() {
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
     const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
 
-    const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
-    const payoutDate = format(addDays(parseISO(selectedDate), 13), "EEEE, do MMMM yyyy");
+    try {
+      const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
+      const payoutDate = format(addDays(parseISO(selectedDate), 13), "EEEE, do MMMM yyyy");
 
-    doc.setFontSize(22);
-    doc.text("Newton's Collectables", 14, 20);
-    doc.setFontSize(10);
-    doc.text(`INVOICE #${invoiceNum}`, 196, 20, { align: 'right' });
-    doc.line(14, 33, 196, 33);
-    doc.text(`Seller: ${seller.name}`, 14, 43);
-    doc.text(`Report Date: ${formattedDate}`, 14, 48);
-    doc.text(`Estimated Payout Date: ${payoutDate}`, 14, 53);
+      doc.setFontSize(22);
+      doc.text("Newton's Collectables", 14, 20);
+      doc.setFontSize(10);
+      doc.text(`INVOICE #${invoiceNum}`, 196, 20, { align: 'right' });
+      doc.line(14, 33, 196, 33);
+      doc.text(`Seller: ${seller.name}`, 14, 43);
+      doc.text(`Report Date: ${formattedDate}`, 14, 48);
+      doc.text(`Estimated Payout Date: ${payoutDate}`, 14, 53);
 
-    autoTable(doc, {
-      startY: 63,
-      head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
-      body: sellerDailySales.map(sale => [
-        sale.cardName, 
-        `£${sale.price.toFixed(2)}`, 
-        sale.payoutStatus || 'Pending',
-        `£${(sale.price - (sale.commission || 0)).toFixed(2)}`
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: [0, 0, 0] },
-      margin: { top: 60 }
-    });
+      autoTable(doc, {
+        startY: 63,
+        head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
+        body: sellerDailySales.map(sale => [
+          sale.cardName, 
+          `£${sale.price.toFixed(2)}`, 
+          sale.payoutStatus || 'Pending',
+          `£${(sale.price - (sale.commission || 0)).toFixed(2)}`
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [0, 0, 0] },
+        margin: { top: 60 }
+      });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.rect(120, finalY, 76, 35);
-    doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 12);
-    doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 18);
-    doc.setFont(undefined, 'bold');
-    doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 28);
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
-    doc.save(`NC_Invoice_${invoiceNum}.pdf`);
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      doc.rect(120, finalY, 76, 35);
+      doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 12);
+      doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 18);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 28);
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
+      doc.save(`NC_Invoice_${invoiceNum}.pdf`);
+    } catch (err) {
+      toast({ variant: "destructive", title: "PDF Error", description: "Failed to generate report." });
+    }
   };
 
   if (!isMounted || !isLoaded || isUserLoading) {
@@ -558,7 +585,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black">£{financialSummary.intake.toFixed(2)}</div>
+                <div className="text-2xl font-black text-slate-900">£{financialSummary.intake.toFixed(2)}</div>
                 <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
                   <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue (Till Total)
                 </div>
@@ -590,7 +617,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black">£{(financialSummary.runningCashPosition || 0).toFixed(2)}</div>
+                <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition || 0).toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance (Intake - Paid)</div>
               </CardContent>
             </Card>
@@ -608,8 +635,8 @@ export default function Dashboard() {
                 <ChartContainer config={chartConfig} className="h-[250px] w-full">
                   <BarChart data={chartData}>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                    <XAxis dataKey="name" hide />
-                    <YAxis hide />
+                    <XAxis dataKey="name" />
+                    <YAxis />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Bar dataKey="inHouse" fill="var(--color-inHouse)" radius={4} name="In-House Gross" />
                     <Bar dataKey="commissions" fill="var(--color-commissions)" radius={4} name="NC Commission" />
@@ -632,7 +659,7 @@ export default function Dashboard() {
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-primary" 
-                      style={{ width: `${(financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100}%` }}
+                      style={{ width: `${Math.min(100, (financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100)}%` }}
                     />
                   </div>
                   
@@ -643,7 +670,7 @@ export default function Dashboard() {
                   <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-slate-300" 
-                      style={{ width: `${(financialSummary.sellerGross / (financialSummary.intake || 1)) * 100}%` }}
+                      style={{ width: `${Math.min(100, (financialSummary.sellerGross / (financialSummary.intake || 1)) * 100)}%` }}
                     />
                   </div>
 
@@ -837,12 +864,12 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3">
                     <div className="bg-primary text-white p-2 rounded-xl"><ArrowRightLeft className="w-4 h-4" /></div>
                     <div>
-                      <CardTitle className="text-lg font-black uppercase">This Friday</CardTitle>
+                      <CardTitle className="text-lg font-black uppercase text-slate-900">This Friday</CardTitle>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-black">£{payoutForecast.thisFriday.total.toFixed(2)}</span>
+                    <span className="text-2xl font-black text-slate-900">£{payoutForecast.thisFriday.total.toFixed(2)}</span>
                   </div>
                </CardHeader>
                <CardContent className="p-6 space-y-3">
@@ -877,12 +904,12 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3">
                     <div className="bg-slate-400 text-white p-2 rounded-xl"><Clock className="w-4 h-4" /></div>
                     <div>
-                      <CardTitle className="text-lg font-black uppercase">Next Friday</CardTitle>
+                      <CardTitle className="text-lg font-black uppercase text-slate-900">Next Friday</CardTitle>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-black">£{payoutForecast.nextFriday.total.toFixed(2)}</span>
+                    <span className="text-2xl font-black text-slate-900">£{payoutForecast.nextFriday.total.toFixed(2)}</span>
                   </div>
                </CardHeader>
                <CardContent className="p-6 space-y-3">
@@ -905,7 +932,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3">
                     <div className="bg-primary text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
                     <div>
-                      <CardTitle className="text-lg font-black uppercase">Friday Prediction</CardTitle>
+                      <CardTitle className="text-lg font-black uppercase text-white">Friday Prediction</CardTitle>
                       <p className="text-[10px] text-white/40 font-bold uppercase">Estimated Cash Balance</p>
                     </div>
                   </div>
@@ -930,7 +957,7 @@ export default function Dashboard() {
           <Separator className="my-12" />
           <div className="flex items-center gap-3 mb-8">
             <Scale className="w-6 h-6 text-primary" />
-            <h2 className="text-2xl font-black uppercase tracking-tighter">Master Financial Ledger</h2>
+            <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Master Financial Ledger</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
             <Card className="border-none shadow-sm rounded-2xl bg-white">
@@ -939,7 +966,7 @@ export default function Dashboard() {
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
+              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-slate-900">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
             </Card>
             <Card className="border-none shadow-sm rounded-2xl bg-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">In-House Rev</CardTitle></CardHeader>
@@ -964,7 +991,7 @@ export default function Dashboard() {
             <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Total Global P&L</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
-                <div className="text-xl font-black">
+                <div className="text-xl font-black text-white">
                   £{(globalAudit.netProfit || 0).toFixed(2)}
                 </div>
               </CardContent>
@@ -1004,7 +1031,7 @@ export default function Dashboard() {
               <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
                 <Card className="shadow-sm border-none rounded-3xl bg-white group hover:shadow-xl transition-all duration-500">
                   <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Gross Sales</CardTitle></CardHeader>
-                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter">£{sellerStats.total.toFixed(2)}</div></CardContent>
+                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-slate-900">£{sellerStats.total.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-white">
                   <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader>
@@ -1013,7 +1040,7 @@ export default function Dashboard() {
                 <Card className="shadow-sm border-none rounded-3xl bg-primary text-white">
                   <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout</CardTitle></CardHeader>
                   <CardContent className="p-6 pt-0">
-                    <div className="text-4xl font-black tracking-tighter">£{sellerStats.payout.toFixed(2)}</div>
+                    <div className="text-4xl font-black tracking-tighter text-white">£{sellerStats.payout.toFixed(2)}</div>
                     <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50">
                       <Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}
                     </div>
@@ -1027,9 +1054,9 @@ export default function Dashboard() {
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
                <CardHeader className="p-8 border-b bg-slate-50/20">
                   <div className="flex justify-between items-center">
-                    <CardTitle className="text-sm font-black uppercase">Transaction Itemization</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle>
                     <div className="text-[10px] font-bold text-slate-400 uppercase">
-                      Report Period: {format(parseISO(selectedDate), "EEEE, do MMMM yyyy")}
+                      Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}
                     </div>
                   </div>
                </CardHeader>
@@ -1039,8 +1066,8 @@ export default function Dashboard() {
                     <TableBody>
                        {sellerDailySales.map((sale) => (
                          <TableRow key={sale.id} className="h-16 hover:bg-slate-50/30">
-                           <TableCell className="pl-8 font-bold uppercase text-xs">{sale.cardName}</TableCell>
-                           <TableCell className="font-bold">£{sale.price.toFixed(2)}</TableCell>
+                           <TableCell className="pl-8 font-bold uppercase text-xs text-slate-900">{sale.cardName}</TableCell>
+                           <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                            <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
                            <TableCell className="text-right pr-8 font-black text-primary">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                          </TableRow>
@@ -1054,7 +1081,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Global Branding Footer */}
       <footer className="py-12 border-t mt-12 bg-slate-50/50 rounded-t-3xl text-center space-y-4">
         <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">
           {LEGAL_STATEMENT}
@@ -1064,7 +1090,6 @@ export default function Dashboard() {
         </p>
       </footer>
 
-      {/* Auth & Management Dialogs */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
