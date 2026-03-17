@@ -121,6 +121,33 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   
 };
 
+// Helper to aggregate sales (grouping pack sales)
+function aggregateSales(salesList: Sale[]) {
+  const packsMap: Record<string, Sale> = {};
+  const cardsList: Sale[] = [];
+
+  salesList.forEach(sale => {
+    if (sale.cardName.startsWith("Booster Packs")) {
+      const key = `${sale.sellerId}_${sale.saleDate}`;
+      if (!packsMap[key]) {
+        packsMap[key] = {
+          ...sale,
+          cardName: "Booster Packs (Aggregated)",
+          price: 0,
+          commission: 0,
+          id: `aggregated-packs-${key}` // Pseudo-id for table rendering
+        };
+      }
+      packsMap[key].price += sale.price;
+      packsMap[key].commission += (sale.commission || 0);
+    } else {
+      cardsList.push(sale);
+    }
+  });
+
+  return [...cardsList, ...Object.values(packsMap)].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+}
+
 export default function Dashboard() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
@@ -222,33 +249,40 @@ export default function Dashboard() {
     return sales[selectedDate] || {};
   }, [sales, selectedDate, isMounted]);
 
-  const allDailySales = useMemo(() => {
-    const list = Object.values(dailySalesData).flat();
-    return list.sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+  const allDailySalesRaw = useMemo(() => {
+    return Object.values(dailySalesData).flat();
   }, [dailySalesData]);
 
-  const sellerDailySales = useMemo(() => {
+  const allDailySalesAggregated = useMemo(() => {
+    return aggregateSales(allDailySalesRaw);
+  }, [allDailySalesRaw]);
+
+  const sellerDailySalesRaw = useMemo(() => {
     if (!profileId || !authenticatedSellerId || !dailySalesData) return [];
     return dailySalesData[authenticatedSellerId] || [];
   }, [profileId, authenticatedSellerId, dailySalesData]);
 
+  const sellerDailySalesAggregated = useMemo(() => {
+    return aggregateSales(sellerDailySalesRaw);
+  }, [sellerDailySalesRaw]);
+
   const sellerStats = useMemo(() => {
     if (!isMounted) return { total: 0, commission: 0, payout: 0, payoutDate: "N/A" };
-    const total = sellerDailySales.reduce((acc, s) => acc + s.price, 0);
-    const comm = sellerDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const total = sellerDailySalesRaw.reduce((acc, s) => acc + s.price, 0);
+    const comm = sellerDailySalesRaw.reduce((acc, s) => acc + (s.commission || 0), 0);
     return {
       total,
       commission: comm,
       payout: total - comm,
       payoutDate: selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A"
     };
-  }, [sellerDailySales, selectedDate, isMounted]);
+  }, [sellerDailySalesRaw, selectedDate, isMounted]);
 
   const financialSummary = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
 
-    const totalSellerGross = allDailySales.reduce((acc, s) => acc + s.price, 0);
-    const totalSellerCommission = allDailySales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const totalSellerGross = allDailySalesRaw.reduce((acc, s) => acc + s.price, 0);
+    const totalSellerCommission = allDailySalesRaw.reduce((acc, s) => acc + (s.commission || 0), 0);
     const totalSellerPayoutLiability = totalSellerGross - totalSellerCommission;
     
     const shopIntake = currentDayFinance?.totalIntake || 0;
@@ -276,7 +310,7 @@ export default function Dashboard() {
       runningCashPosition,
       totalDailyVolume: totalSellerGross 
     };
-  }, [profileId, allDailySales, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
+  }, [profileId, allDailySalesRaw, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
 
   const globalAudit = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
@@ -506,7 +540,7 @@ export default function Dashboard() {
       autoTable(doc, {
         startY: 63,
         head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
-        body: sellerDailySales.map(sale => [
+        body: sellerDailySalesAggregated.map(sale => [
           sale.cardName, 
           `£${sale.price.toFixed(2)}`, 
           sale.payoutStatus || 'Pending',
@@ -904,8 +938,8 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allDailySales.length > 0 ? (
-                    allDailySales.map((sale) => (
+                  {allDailySalesAggregated.length > 0 ? (
+                    allDailySalesAggregated.map((sale) => (
                       <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
                         <TableCell className="pl-6">
                           <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">
@@ -1136,7 +1170,7 @@ export default function Dashboard() {
                   <Table>
                     <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead><TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Net</TableHead></TableRow></TableHeader>
                     <TableBody>
-                       {sellerDailySales.map((sale) => (
+                       {sellerDailySalesAggregated.map((sale) => (
                          <TableRow key={sale.id} className="h-16 hover:bg-slate-50/30">
                            <TableCell className="pl-8 font-bold uppercase text-xs text-slate-900">{sale.cardName}</TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
@@ -1144,7 +1178,7 @@ export default function Dashboard() {
                            <TableCell className="text-right pr-8 font-black text-primary">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                          </TableRow>
                        ))}
-                       {sellerDailySales.length === 0 && <TableRow><TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
+                       {sellerDailySalesAggregated.length === 0 && <TableRow><TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
                     </TableBody>
                   </Table>
                </CardContent>
