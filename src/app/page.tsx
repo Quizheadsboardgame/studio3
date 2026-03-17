@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -44,7 +43,8 @@ import {
   Scale,
   TrendingDown,
   Briefcase,
-  LayoutDashboard
+  LayoutDashboard,
+  Box
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,6 +162,9 @@ export default function Dashboard() {
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
   const [entrySellerId, setEntrySellerId] = useState("");
+
+  const [newPackQuantity, setNewPackQuantity] = useState("1");
+  const [newPackPrice, setNewPackPrice] = useState("");
 
   const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
   const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
@@ -426,6 +429,19 @@ export default function Dashboard() {
       setNewSaleCard("");
       setNewSalePrice("");
       toast({ title: "Success", description: "Transaction logged." });
+    }
+  };
+
+  const handleAddPackSale = () => {
+    const qtyNum = parseInt(newPackQuantity);
+    const priceNum = parseFloat(newPackPrice);
+    if (entrySellerId && !isNaN(qtyNum) && !isNaN(priceNum)) {
+      const total = qtyNum * priceNum;
+      const desc = `Booster Packs (${qtyNum}x @ £${priceNum.toFixed(2)})`;
+      addSale(selectedDate, entrySellerId, desc, total);
+      setNewPackQuantity("1");
+      setNewPackPrice("");
+      toast({ title: "Success", description: "Pack sale logged." });
     }
   };
 
@@ -773,12 +789,12 @@ export default function Dashboard() {
             </div>
             <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
           </CardHeader>
-          <CardContent className="p-8 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50/50 p-8 rounded-3xl items-end border shadow-inner">
-              <div className="md:col-span-3 space-y-3">
-                <label className="text-[10px] font-black uppercase text-slate-400">Seller Entity</label>
+          <CardContent className="p-8 space-y-10">
+            {/* Seller Selection Box */}
+            <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
+                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
                 <Select value={entrySellerId} onValueChange={setEntrySellerId}>
-                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary">
+                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
                     <SelectValue placeholder="Select seller" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -787,48 +803,104 @@ export default function Dashboard() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="md:col-span-5 space-y-3">
-                <label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label>
-                <Input 
-                  placeholder="e.g., Rare Holographic Charizard" 
-                  className="bg-white h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
-                  value={newSaleCard}
-                  onChange={(e) => setNewSaleCard(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-2 space-y-3">
-                <label className="text-[10px] font-black uppercase text-slate-400">Price</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
-                  <Input 
-                    type="number" 
-                    step="0.01"
-                    placeholder="0.00" 
-                    className="bg-white h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
-                    value={newSalePrice}
-                    onChange={(e) => setNewSalePrice(e.target.value)}
-                  />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Single Card Entry */}
+              <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <CreditCard className="w-4 h-4 text-primary" />
+                  <h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label>
+                    <Input 
+                      placeholder="e.g., Rare Holographic Charizard" 
+                      className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
+                      value={newSaleCard}
+                      onChange={(e) => setNewSaleCard(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Price</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
+                      <Input 
+                        type="number" 
+                        step="0.01"
+                        placeholder="0.00" 
+                        className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
+                        value={newSalePrice}
+                        onChange={(e) => setNewSalePrice(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
+                    onClick={handleAddSale}
+                    disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}
+                  >
+                    Log Card Sale
+                  </Button>
                 </div>
               </div>
-              <div className="md:col-span-2">
-                <Button 
-                  className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
-                  onClick={handleAddSale}
-                  disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}
-                >
-                  Log Sale
-                </Button>
+
+              {/* Booster Pack Entry */}
+              <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Box className="w-4 h-4 text-primary" />
+                  <h3 className="text-xs font-black uppercase text-slate-600">Booster Pack Entry</h3>
+                </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400">Quantity</label>
+                      <Input 
+                        type="number"
+                        min="1"
+                        className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
+                        value={newPackQuantity}
+                        onChange={(e) => setNewPackQuantity(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400">Price Per Pack</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          placeholder="0.00" 
+                          className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
+                          value={newPackPrice}
+                          onChange={(e) => setNewPackPrice(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-dashed text-center">
+                    <span className="text-[9px] font-black uppercase text-slate-400">Estimated Total: </span>
+                    <span className="text-sm font-black text-primary">£{(Number(newPackQuantity) * (Number(newPackPrice) || 0)).toFixed(2)}</span>
+                  </div>
+                  <Button 
+                    className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
+                    onClick={handleAddPackSale}
+                    disabled={!entrySellerId || !newPackPrice || Number(newPackQuantity) < 1}
+                  >
+                    Log Pack Sale
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <div className="border rounded-2xl overflow-hidden bg-white shadow-sm">
+            <div className="border rounded-2xl overflow-hidden bg-white shadow-sm mt-8">
               <Table>
                 <TableHeader className="bg-slate-50/50">
                   <TableRow>
                     <TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] h-14">Card Detail</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Sale Amount</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] h-14">Detail</TableHead>
+                    <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Total Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
