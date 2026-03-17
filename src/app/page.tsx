@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -44,7 +45,8 @@ import {
   TrendingDown,
   Briefcase,
   LayoutDashboard,
-  Box
+  Box,
+  MoreVertical
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -193,6 +195,12 @@ export default function Dashboard() {
   const [newPackQuantity, setNewPackQuantity] = useState("1");
   const [newPackPrice, setNewPackPrice] = useState("");
 
+  // Edit Sale Dialog State
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [editSaleCard, setEditSaleCard] = useState("");
+  const [editSalePrice, setEditSalePrice] = useState("");
+  const [editSaleSellerId, setEditSaleSellerId] = useState("");
+
   const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
   const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
 
@@ -256,6 +264,11 @@ export default function Dashboard() {
   const allDailySalesAggregated = useMemo(() => {
     return aggregateSales(allDailySalesRaw);
   }, [allDailySalesRaw]);
+
+  // Managers in Staff Vault see raw sales list to allow individual management
+  const staffVaultTableData = useMemo(() => {
+    return isManagerAuthenticated ? allDailySalesRaw : allDailySalesAggregated;
+  }, [isManagerAuthenticated, allDailySalesRaw, allDailySalesAggregated]);
 
   const sellerDailySalesRaw = useMemo(() => {
     if (!profileId || !authenticatedSellerId || !dailySalesData) return [];
@@ -476,6 +489,25 @@ export default function Dashboard() {
       setNewPackQuantity("1");
       setNewPackPrice("");
       toast({ title: "Success", description: "Pack sale logged." });
+    }
+  };
+
+  const handleEditSale = (sale: Sale) => {
+    setEditingSale(sale);
+    setEditSaleCard(sale.cardName);
+    setEditSalePrice(sale.price.toString());
+    setEditSaleSellerId(sale.sellerId);
+  };
+
+  const handleSaveEditSale = () => {
+    if (editingSale && editSaleCard && !isNaN(parseFloat(editSalePrice))) {
+      updateSale(editingSale.id!, {
+        cardName: editSaleCard,
+        price: parseFloat(editSalePrice),
+        sellerId: editSaleSellerId
+      }, editingSale.profileOrigin);
+      setEditingSale(null);
+      toast({ title: "Updated", description: "Sale record modified." });
     }
   };
 
@@ -935,11 +967,12 @@ export default function Dashboard() {
                     <TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead>
                     <TableHead className="font-black uppercase text-[10px] h-14">Detail</TableHead>
                     <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Total Amount</TableHead>
+                    {isManagerAuthenticated && <TableHead className="font-black uppercase text-[10px] h-14 w-24 text-center">Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allDailySalesAggregated.length > 0 ? (
-                    allDailySalesAggregated.map((sale) => (
+                  {staffVaultTableData.length > 0 ? (
+                    staffVaultTableData.map((sale) => (
                       <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
                         <TableCell className="pl-6">
                           <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">
@@ -948,11 +981,23 @@ export default function Dashboard() {
                         </TableCell>
                         <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
                         <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
+                        {isManagerAuthenticated && (
+                          <TableCell className="text-center px-2">
+                             <div className="flex items-center justify-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                             </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell>
+                      <TableCell colSpan={isManagerAuthenticated ? 4 : 3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -1260,6 +1305,52 @@ export default function Dashboard() {
                <span className="font-black uppercase text-[10px]">Transfer</span>
              </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Sale Dialog (Manager Only) */}
+      <Dialog open={!!editingSale} onOpenChange={(open) => !open && setEditingSale(null)}>
+        <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center">
+            <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Pencil className="w-8 h-8" /></div>
+            <DialogTitle className="text-2xl font-black uppercase">Edit Transaction</DialogTitle>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400">Card Name / Detail</label>
+              <Input 
+                value={editSaleCard}
+                onChange={(e) => setEditSaleCard(e.target.value)}
+                className="h-12 rounded-xl px-4 font-bold border-slate-100"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400">Sale Price (£)</label>
+              <Input 
+                type="number"
+                step="0.01"
+                value={editSalePrice}
+                onChange={(e) => setEditSalePrice(e.target.value)}
+                className="h-12 rounded-xl px-4 font-black border-slate-100"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400">Assigned Seller</label>
+              <Select value={editSaleSellerId} onValueChange={setEditSaleSellerId}>
+                <SelectTrigger className="h-12 rounded-xl px-4 font-bold border-slate-100">
+                  <SelectValue placeholder="Change seller" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {sellers.map((s) => (
+                    <SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveEditSale} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Save Changes</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
