@@ -157,6 +157,7 @@ export default function Dashboard() {
   
   const [profileId, setProfileId] = useState<ProfileType>('staff');
   const [isMounted, setIsMounted] = useState(false);
+  const [currentYear, setCurrentYear] = useState<number>(2025);
   
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -211,9 +212,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     setIsMounted(true);
-    setSelectedDate(format(new Date(), "yyyy-MM-dd"));
+    const now = new Date();
+    setSelectedDate(format(now, "yyyy-MM-dd"));
+    setCurrentYear(now.getFullYear());
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
-    if (expiry && parseInt(expiry) > new Date().getTime()) {
+    if (expiry && parseInt(expiry) > now.getTime()) {
       setIsManagerAuthenticated(true);
     }
   }, []);
@@ -667,7 +670,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-slate-900">£{financialSummary.intake.toFixed(2)}</div>
+                <div className="text-2xl font-black text-slate-900">£{(financialSummary.intake ?? 0).toFixed(2)}</div>
                 <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
                   <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue (Till Total)
                 </div>
@@ -679,7 +682,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Running Sales</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-primary">£{financialSummary.totalDailyVolume.toFixed(2)}</div>
+                <div className="text-2xl font-black text-primary">£{(financialSummary.totalDailyVolume ?? 0).toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Sum of Logged Card Sales</div>
               </CardContent>
             </Card>
@@ -689,7 +692,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-green-600">£{financialSummary.netProfit.toFixed(2)}</div>
+                <div className="text-2xl font-black text-green-600">£{(financialSummary.netProfit ?? 0).toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Liabilities & Costs</div>
               </CardContent>
             </Card>
@@ -699,7 +702,7 @@ export default function Dashboard() {
                 <CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle>
               </CardHeader>
               <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition || 0).toFixed(2)}</div>
+                <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition ?? 0).toFixed(2)}</div>
                 <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance (Intake - Paid)</div>
               </CardContent>
             </Card>
@@ -1091,7 +1094,7 @@ export default function Dashboard() {
                <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
                   <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
                   <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-white'}`}>
-                    £{(predictedFridayPosition || 0).toFixed(2)}
+                    £{(predictedFridayPosition ?? 0).toFixed(2)}
                   </div>
                   <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
                     Based on current Running Liquidity minus This Friday's Liabilities
@@ -1135,7 +1138,7 @@ export default function Dashboard() {
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-white'}`}>
-                  £{(globalAudit.currentLiquidity || 0).toFixed(2)}
+                  £{(globalAudit.currentLiquidity ?? 0).toFixed(2)}
                 </div>
               </CardContent>
             </Card>
@@ -1143,7 +1146,7 @@ export default function Dashboard() {
               <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Total Global P&L</CardTitle></CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="text-xl font-black text-white">
-                  £{(globalAudit.netProfit || 0).toFixed(2)}
+                  £{(globalAudit.netProfit ?? 0).toFixed(2)}
                 </div>
               </CardContent>
             </Card>
@@ -1237,7 +1240,7 @@ export default function Dashboard() {
           {LEGAL_STATEMENT}
         </p>
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-          &copy; {new Date().getFullYear()} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard
+          &copy; {currentYear} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard
         </p>
       </footer>
 
