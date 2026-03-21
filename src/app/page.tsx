@@ -46,10 +46,13 @@ import {
   Briefcase,
   LayoutDashboard,
   Box,
-  MoreVertical
+  MoreVertical,
+  UserPlus,
+  ShieldAlert,
+  Save
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -123,7 +126,6 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   
 };
 
-// Helper to aggregate sales (grouping pack sales)
 function aggregateSales(salesList: Sale[]) {
   const packsMap: Record<string, Sale> = {};
   const cardsList: Sale[] = [];
@@ -137,7 +139,7 @@ function aggregateSales(salesList: Sale[]) {
           cardName: "Booster Packs (Aggregated)",
           price: 0,
           commission: 0,
-          id: `aggregated-packs-${key}` // Pseudo-id for table rendering
+          id: `aggregated-packs-${key}` 
         };
       }
       packsMap[key].price += sale.price;
@@ -196,7 +198,6 @@ export default function Dashboard() {
   const [newPackQuantity, setNewPackQuantity] = useState("1");
   const [newPackPrice, setNewPackPrice] = useState("");
 
-  // Edit Sale Dialog State
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
   const [editSaleCard, setEditSaleCard] = useState("");
   const [editSalePrice, setEditSalePrice] = useState("");
@@ -209,6 +210,9 @@ export default function Dashboard() {
   const [financeCard, setFinanceCard] = useState("");
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
+
+  const [newSellerName, setNewSellerName] = useState("");
+  const [newSellerComm, setNewSellerComm] = useState("10");
 
   useEffect(() => {
     setIsMounted(true);
@@ -268,7 +272,6 @@ export default function Dashboard() {
     return aggregateSales(allDailySalesRaw);
   }, [allDailySalesRaw]);
 
-  // Managers in Staff Vault see raw sales list to allow individual management
   const staffVaultTableData = useMemo(() => {
     return isManagerAuthenticated ? allDailySalesRaw : allDailySalesAggregated;
   }, [isManagerAuthenticated, allDailySalesRaw, allDailySalesAggregated]);
@@ -407,7 +410,7 @@ export default function Dashboard() {
           forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         }
       } catch {
-        // Skip invalid dates
+        // Skip
       }
     });
 
@@ -549,6 +552,24 @@ export default function Dashboard() {
     }
   };
 
+  const handleAddNewSeller = () => {
+    const comm = parseFloat(newSellerComm);
+    if (newSellerName.trim() && !isNaN(comm)) {
+      addSeller(newSellerName.trim(), comm);
+      setNewSellerName("");
+      setNewSellerComm("10");
+      toast({ title: "Seller Provisioned", description: `${newSellerName} added to the system.` });
+    }
+  };
+
+  const handleArchiveSeller = (seller: Seller) => {
+    updateSeller(seller.id, { archived: !seller.archived });
+    toast({ 
+      title: seller.archived ? "Seller Restored" : "Seller Archived", 
+      description: `${seller.name} status updated.` 
+    });
+  };
+
   const handleDownloadPDF = () => {
     if (!authenticatedSellerId || !selectedDate) return;
     const seller = sellers.find(s => s.id === authenticatedSellerId);
@@ -661,121 +682,272 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Financial Oversight (Manager Only) */}
-      {profileId === 'manager' && financialSummary && (
-        <div className="space-y-8 animate-in slide-in-from-top-4 duration-700">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
-              <CardHeader className="p-5 pb-1">
-                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-slate-900">£{(financialSummary.intake ?? 0).toFixed(2)}</div>
-                <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1">
-                  <ArrowUpRight className="w-2 h-2 text-green-500" /> All-in Revenue (Till Total)
+      {/* Manager Profile Wrapper with Tabs */}
+      {profileId === 'manager' && (
+        <Tabs defaultValue="intel" className="space-y-8 animate-in slide-in-from-top-4 duration-700">
+          <TabsList className="bg-white border rounded-2xl h-14 p-1 shadow-sm gap-1">
+            <TabsTrigger value="intel" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Activity className="w-3.5 h-3.5" /> Intelligence
+            </TabsTrigger>
+            <TabsTrigger value="payouts" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Wallet className="w-3.5 h-3.5" /> Settlements
+            </TabsTrigger>
+            <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Users className="w-3.5 h-3.5" /> Sellers
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+              <Scale className="w-3.5 h-3.5" /> Master Ledger
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="intel" className="space-y-8 focus-visible:outline-none">
+            {financialSummary && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
+                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
+                    <CardContent className="p-5 pt-0">
+                      <div className="text-2xl font-black text-slate-900">£{(financialSummary.intake ?? 0).toFixed(2)}</div>
+                      <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1"><ArrowUpRight className="w-2 h-2 text-green-500" /> Daily Revenue (Till)</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white">
+                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Running Sales</CardTitle></CardHeader>
+                    <CardContent className="p-5 pt-0">
+                      <div className="text-2xl font-black text-primary">£{(financialSummary.totalDailyVolume ?? 0).toFixed(2)}</div>
+                      <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Logged Card Sales</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white">
+                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle></CardHeader>
+                    <CardContent className="p-5 pt-0">
+                      <div className="text-2xl font-black text-green-600">£{(financialSummary.netProfit ?? 0).toFixed(2)}</div>
+                      <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Costs</div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
+                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle></CardHeader>
+                    <CardContent className="p-5 pt-0">
+                      <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition ?? 0).toFixed(2)}</div>
+                      <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance</div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-5 pb-1">
-                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Running Sales</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-primary">£{(financialSummary.totalDailyVolume ?? 0).toFixed(2)}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Sum of Logged Card Sales</div>
-              </CardContent>
-            </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                    <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase flex items-center justify-between">Daily Revenue Composition<Badge variant="outline" className="text-[8px] font-black bg-white">TREND ANALYSIS</Badge></CardTitle></CardHeader>
+                    <CardContent className="p-8">
+                      <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                        <BarChart data={chartData}>
+                          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                          <Bar dataKey="inHouse" fill="var(--color-inHouse)" radius={4} name="In-House Gross" />
+                          <Bar dataKey="commissions" fill="var(--color-commissions)" radius={4} name="NC Commission" />
+                          <Bar dataKey="expenses" fill="var(--color-expenses)" radius={4} name="Expenses" />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                    <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase">Revenue Split</CardTitle></CardHeader>
+                    <CardContent className="p-8 space-y-6">
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-400">In-House Sales</span><span className="font-black text-primary">£{financialSummary.inHouseRevenue.toFixed(2)}</span></div>
+                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min(100, (financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100)}%` }} /></div>
+                        <div className="flex justify-between items-center pt-2"><span className="text-[10px] font-black uppercase text-slate-400">External Seller Gross</span><span className="font-black text-slate-700">£{financialSummary.sellerGross.toFixed(2)}</span></div>
+                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-slate-300" style={{ width: `${Math.min(100, (financialSummary.sellerGross / (financialSummary.intake || 1)) * 100)}%` }} /></div>
+                        <Separator />
+                        <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
+                          <div className="flex justify-between items-center"><span className="text-[9px] font-bold uppercase text-slate-400">NC Commission Earned</span><span className="font-black text-green-600">£{financialSummary.sellerCommission.toFixed(2)}</span></div>
+                          <div className="flex justify-between items-center"><span className="text-[9px] font-bold uppercase text-slate-400">Owed to Sellers</span><span className="font-black text-destructive">£{financialSummary.sellerLiability.toFixed(2)}</span></div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </TabsContent>
 
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-5 pb-1">
-                <CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-green-600">£{(financialSummary.netProfit ?? 0).toFixed(2)}</div>
-                <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Liabilities & Costs</div>
-              </CardContent>
-            </Card>
+          <TabsContent value="payouts" className="focus-visible:outline-none">
+            {payoutForecast && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-primary">
+                     <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary text-white p-2 rounded-xl"><ArrowRightLeft className="w-4 h-4" /></div>
+                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">This Friday</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p></div>
+                        </div>
+                        <div className="text-right"><span className="text-2xl font-black text-slate-900">£{payoutForecast.thisFriday.total.toFixed(2)}</span></div>
+                     </CardHeader>
+                     <CardContent className="p-6 space-y-3">
+                        <ScrollArea className="h-[300px]">
+                          {Object.entries(payoutForecast.thisFriday.sellers).map(([name, data], i) => (
+                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                              <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
+                                <Button size="sm" className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity bg-primary" onClick={() => { setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total }); setIsSettlementDialogOpen(true); }}>Settle</Button>
+                              </div>
+                            </div>
+                          ))}
+                          {payoutForecast.thisFriday.count === 0 && <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>}
+                        </ScrollArea>
+                     </CardContent>
+                  </Card>
 
-            <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
-              <CardHeader className="p-5 pb-1">
-                <CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle>
-              </CardHeader>
-              <CardContent className="p-5 pt-0">
-                <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition ?? 0).toFixed(2)}</div>
-                <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance (Intake - Paid)</div>
-              </CardContent>
-            </Card>
-          </div>
+                  <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-slate-200">
+                     <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-slate-400 text-white p-2 rounded-xl"><Clock className="w-4 h-4" /></div>
+                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">Next Friday</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p></div>
+                        </div>
+                        <div className="text-right"><span className="text-2xl font-black text-slate-900">£{payoutForecast.nextFriday.total.toFixed(2)}</span></div>
+                     </CardHeader>
+                     <CardContent className="p-6 space-y-3">
+                        <ScrollArea className="h-[300px]">
+                          {Object.entries(payoutForecast.nextFriday.sellers).map(([name, data], i) => (
+                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                              <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
+                              <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
+                            </div>
+                          ))}
+                          {payoutForecast.nextFriday.count === 0 && <p className="text-center text-[10px] italic text-slate-400 py-4">No upcoming settlements</p>}
+                        </ScrollArea>
+                     </CardContent>
+                  </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-              <CardHeader className="p-8 border-b bg-slate-50/20">
-                <CardTitle className="text-sm font-black uppercase flex items-center justify-between">
-                  Daily Revenue Composition
-                  <Badge variant="outline" className="text-[8px] font-black bg-white">TREND ANALYSIS</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
-                <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                  <BarChart data={chartData}>
-                    <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="inHouse" fill="var(--color-inHouse)" radius={4} name="In-House Gross" />
-                    <Bar dataKey="commissions" fill="var(--color-commissions)" radius={4} name="NC Commission" />
-                    <Bar dataKey="expenses" fill="var(--color-expenses)" radius={4} name="Expenses" />
-                  </BarChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
+                  <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-primary">
+                     <CardHeader className="bg-white/5 px-6 py-4 border-b border-white/10 flex flex-row items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-primary text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
+                          <div><CardTitle className="text-lg font-black uppercase text-white">Friday Prediction</CardTitle><p className="text-[10px] text-white/40 font-bold uppercase">Estimated Balance</p></div>
+                        </div>
+                     </CardHeader>
+                     <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
+                        <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net After Friday Payouts</p>
+                        <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-white'}`}>£{(predictedFridayPosition ?? 0).toFixed(2)}</div>
+                        <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">Based on Running Liquidity minus This Friday's Liabilities</p>
+                     </CardContent>
+                  </Card>
+              </div>
+            )}
+          </TabsContent>
 
-            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-              <CardHeader className="p-8 border-b bg-slate-50/20">
-                <CardTitle className="text-sm font-black uppercase">Revenue Split</CardTitle>
-              </CardHeader>
-              <CardContent className="p-8 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-slate-400">In-House Sales</span>
-                    <span className="font-black text-primary">£{financialSummary.inHouseRevenue.toFixed(2)}</span>
+          <TabsContent value="sellers" className="space-y-8 focus-visible:outline-none">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="shadow-sm border-none rounded-2xl bg-white overflow-hidden">
+                <CardHeader className="p-6 border-b bg-slate-50/20">
+                  <div className="flex items-center gap-3">
+                    <UserPlus className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Provision New Seller</CardTitle>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary" 
-                      style={{ width: `${Math.min(100, (financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100)}%` }}
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Full Name</label>
+                    <Input 
+                      placeholder="e.g., John Smith" 
+                      className="h-12 rounded-xl font-bold border-slate-100"
+                      value={newSellerName}
+                      onChange={(e) => setNewSellerName(e.target.value)}
                     />
                   </div>
-                  
-                  <div className="flex justify-between items-center pt-2">
-                    <span className="text-[10px] font-black uppercase text-slate-400">External Seller Gross</span>
-                    <span className="font-black text-slate-700">£{financialSummary.sellerGross.toFixed(2)}</span>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">NC Commission %</label>
+                    <div className="relative">
+                      <Input 
+                        type="number" 
+                        placeholder="10" 
+                        className="h-12 rounded-xl pr-10 font-black border-slate-100"
+                        value={newSellerComm}
+                        onChange={(e) => setNewSellerComm(e.target.value)}
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">%</span>
+                    </div>
                   </div>
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-slate-300" 
-                      style={{ width: `${Math.min(100, (financialSummary.sellerGross / (financialSummary.intake || 1)) * 100)}%` }}
-                    />
-                  </div>
+                  <Button onClick={handleAddNewSeller} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Add Seller Entity</Button>
+                </CardContent>
+              </Card>
 
-                  <Separator />
-                  
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold uppercase text-slate-400">Total NC Commission Earned</span>
-                      <span className="font-black text-green-600">£{financialSummary.sellerCommission.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold uppercase text-slate-400">Owed to Sellers (Unpaid)</span>
-                      <span className="font-black text-destructive">£{financialSummary.sellerLiability.toFixed(2)}</span>
-                    </div>
+              <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                <CardHeader className="p-6 border-b bg-slate-50/20">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Seller Directory & Access</CardTitle>
                   </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead className="pl-6 font-black uppercase text-[10px] h-14">Seller Name</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Comm %</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Vault Key</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Status</TableHead>
+                        <TableHead className="text-right pr-6 font-black uppercase text-[10px] h-14">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sellers.map((seller) => (
+                        <TableRow key={seller.id} className={`hover:bg-slate-50/50 h-16 ${seller.archived ? 'opacity-50 grayscale' : ''}`}>
+                          <TableCell className="pl-6 font-bold uppercase text-xs">{seller.name}</TableCell>
+                          <TableCell className="font-black text-primary">{seller.defaultCommission}%</TableCell>
+                          <TableCell className="font-mono text-xs font-bold tracking-widest">{seller.password}</TableCell>
+                          <TableCell>
+                            <Badge variant={seller.archived ? "outline" : "default"} className="text-[8px] font-black uppercase">
+                              {seller.archived ? "ARCHIVED" : "ACTIVE"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="rounded-xl p-2 font-bold border-slate-100">
+                                <DropdownMenuItem onClick={() => {
+                                  const newComm = prompt("Enter new commission %:", seller.defaultCommission?.toString());
+                                  if (newComm !== null) updateSeller(seller.id, { defaultCommission: parseFloat(newComm) });
+                                }} className="gap-2"><Settings2 className="w-4 h-4" /> Edit Commission</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  if (confirm("Reset access key?")) updateSeller(seller.id, { password: Math.random().toString(36).slice(-6).toUpperCase() });
+                                }} className="gap-2"><KeyRound className="w-4 h-4" /> Reset Access Key</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleArchiveSeller(seller)} className={`gap-2 ${seller.archived ? 'text-green-600' : 'text-destructive'}`}>
+                                  {seller.archived ? <RefreshCw className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                                  {seller.archived ? "Restore Seller" : "Archive Seller"}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="audit" className="focus-visible:outline-none">
+            {globalAudit && (
+              <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-1000 pb-20">
+                <div className="flex items-center gap-3 mb-8"><Scale className="w-6 h-6 text-primary" /><h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Master Financial Ledger</h2></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Recorded Sales</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalSellerGross.toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-slate-900">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">In-House Rev</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-blue-600">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-green-600">£{globalAudit.totalCommission.toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Expenses</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-destructive">£{globalAudit.totalExpenses.toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-white'}`}>£{(globalAudit.currentLiquidity ?? 0).toFixed(2)}</div></CardContent></Card>
+                  <Card className="border-none shadow-sm rounded-2xl bg-primary text-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Global P&L</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-white">£{(globalAudit.netProfit ?? 0).toFixed(2)}</div></CardContent></Card>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Finance Portal (Staff/Finance) */}
@@ -859,7 +1031,6 @@ export default function Dashboard() {
             <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
           </CardHeader>
           <CardContent className="p-8 space-y-10">
-            {/* Seller Selection Box */}
             <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
                 <Select value={entrySellerId} onValueChange={setEntrySellerId}>
@@ -875,90 +1046,24 @@ export default function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Single Card Entry */}
               <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <CreditCard className="w-4 h-4 text-primary" />
-                  <h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3>
-                </div>
+                <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3></div>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label>
-                    <Input 
-                      placeholder="e.g., Rare Holographic Charizard" 
-                      className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
-                      value={newSaleCard}
-                      onChange={(e) => setNewSaleCard(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Price</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        placeholder="0.00" 
-                        className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
-                        value={newSalePrice}
-                        onChange={(e) => setNewSalePrice(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button 
-                    className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
-                    onClick={handleAddSale}
-                    disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}
-                  >
-                    Log Card Sale
-                  </Button>
+                  <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
+                  <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
+                  <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Card Sale</Button>
                 </div>
               </div>
 
-              {/* Booster Pack Entry */}
               <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <Box className="w-4 h-4 text-primary" />
-                  <h3 className="text-xs font-black uppercase text-slate-600">Booster Pack Entry</h3>
-                </div>
+                <div className="flex items-center gap-2 mb-2"><Box className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Booster Pack Entry</h3></div>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400">Quantity</label>
-                      <Input 
-                        type="number"
-                        min="1"
-                        className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary"
-                        value={newPackQuantity}
-                        onChange={(e) => setNewPackQuantity(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400">Price Per Pack</label>
-                      <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span>
-                        <Input 
-                          type="number" 
-                          step="0.01"
-                          placeholder="0.00" 
-                          className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary"
-                          value={newPackPrice}
-                          onChange={(e) => setNewPackPrice(e.target.value)}
-                        />
-                      </div>
-                    </div>
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newPackQuantity} onChange={(e) => setNewPackQuantity(e.target.value)} /></div>
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price Per Pack</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newPackPrice} onChange={(e) => setNewPackPrice(e.target.value)} /></div></div>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-dashed text-center">
-                    <span className="text-[9px] font-black uppercase text-slate-400">Estimated Total: </span>
-                    <span className="text-sm font-black text-primary">£{(Number(newPackQuantity) * (Number(newPackPrice) || 0)).toFixed(2)}</span>
-                  </div>
-                  <Button 
-                    className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90"
-                    onClick={handleAddPackSale}
-                    disabled={!entrySellerId || !newPackPrice || Number(newPackQuantity) < 1}
-                  >
-                    Log Pack Sale
-                  </Button>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-dashed text-center"><span className="text-[9px] font-black uppercase text-slate-400">Estimated Total: </span><span className="text-sm font-black text-primary">£{(Number(newPackQuantity) * (Number(newPackPrice) || 0)).toFixed(2)}</span></div>
+                  <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddPackSale} disabled={!entrySellerId || !newPackPrice || Number(newPackQuantity) < 1}>Log Pack Sale</Button>
                 </div>
               </div>
             </div>
@@ -977,31 +1082,21 @@ export default function Dashboard() {
                   {staffVaultTableData.length > 0 ? (
                     staffVaultTableData.map((sale) => (
                       <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
-                        <TableCell className="pl-6">
-                          <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">
-                            {sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="pl-6"><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
                         <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
                         <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
                         {isManagerAuthenticated && (
                           <TableCell className="text-center px-2">
                              <div className="flex items-center justify-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}>
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
                              </div>
                           </TableCell>
                         )}
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={isManagerAuthenticated ? 4 : 3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={isManagerAuthenticated ? 4 : 3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -1010,177 +1105,22 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Payout Forecasting (Manager Only) */}
-      {profileId === 'manager' && payoutForecast && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in slide-in-from-bottom-6 duration-1000">
-           <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-primary">
-               <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary text-white p-2 rounded-xl"><ArrowRightLeft className="w-4 h-4" /></div>
-                    <div>
-                      <CardTitle className="text-lg font-black uppercase text-slate-900">This Friday</CardTitle>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-slate-900">£{payoutForecast.thisFriday.total.toFixed(2)}</span>
-                  </div>
-               </CardHeader>
-               <CardContent className="p-6 space-y-3">
-                  <ScrollArea className="h-[200px]">
-                    {Object.entries(payoutForecast.thisFriday.sellers).map(([name, data], i) => (
-                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
-                        <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
-                          <Button 
-                            size="sm" 
-                            className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity bg-primary"
-                            onClick={() => {
-                              setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total });
-                              setIsSettlementDialogOpen(true);
-                            }}
-                          >
-                            Settle
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                    {payoutForecast.thisFriday.count === 0 && (
-                      <p className="text-center text-[10px] italic text-slate-400 py-4">No settlements due</p>
-                    )}
-                  </ScrollArea>
-               </CardContent>
-            </Card>
-
-            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-slate-200">
-               <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-slate-400 text-white p-2 rounded-xl"><Clock className="w-4 h-4" /></div>
-                    <div>
-                      <CardTitle className="text-lg font-black uppercase text-slate-900">Next Friday</CardTitle>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-slate-900">£{payoutForecast.nextFriday.total.toFixed(2)}</span>
-                  </div>
-               </CardHeader>
-               <CardContent className="p-6 space-y-3">
-                  <ScrollArea className="h-[200px]">
-                    {Object.entries(payoutForecast.nextFriday.sellers).map(([name, data], i) => (
-                      <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
-                        <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
-                        <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
-                      </div>
-                    ))}
-                    {payoutForecast.nextFriday.count === 0 && (
-                      <p className="text-center text-[10px] italic text-slate-400 py-4">No upcoming settlements</p>
-                    )}
-                  </ScrollArea>
-               </CardContent>
-            </Card>
-
-            <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-primary">
-               <CardHeader className="bg-white/5 px-6 py-4 border-b border-white/10 flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
-                    <div>
-                      <CardTitle className="text-lg font-black uppercase text-white">Friday Prediction</CardTitle>
-                      <p className="text-[10px] text-white/40 font-bold uppercase">Estimated Cash Balance</p>
-                    </div>
-                  </div>
-               </CardHeader>
-               <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
-                  <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net Cash After Friday Payouts</p>
-                  <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-white'}`}>
-                    £{(predictedFridayPosition ?? 0).toFixed(2)}
-                  </div>
-                  <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">
-                    Based on current Running Liquidity minus This Friday's Liabilities
-                  </p>
-               </CardContent>
-            </Card>
-        </div>
-      )}
-
-      {/* Global Master Ledger Audit (Manager Only) */}
-      {profileId === 'manager' && globalAudit && (
-        <div className="animate-in slide-in-from-bottom-8 duration-1000 delay-300 pb-20">
-          <span id="pnl-ledger" />
-          <Separator className="my-12" />
-          <div className="flex items-center gap-3 mb-8">
-            <Scale className="w-6 h-6 text-primary" />
-            <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Master Financial Ledger</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Lifetime Recorded Sales</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalSellerGross.toFixed(2)}</div></CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-slate-900">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">In-House Rev</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-blue-600">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-green-600">£{globalAudit.totalCommission.toFixed(2)}</div></CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Expenses</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0"><div className="text-xl font-black text-destructive">£{globalAudit.totalExpenses.toFixed(2)}</div></CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-white'}`}>
-                  £{(globalAudit.currentLiquidity ?? 0).toFixed(2)}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
-              <CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Total Global P&L</CardTitle></CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-xl font-black text-white">
-                  £{(globalAudit.netProfit ?? 0).toFixed(2)}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
       {/* Personal Seller Portal */}
       {profileId === 'seller' && (
         <div className="space-y-8 animate-in zoom-in-95 duration-700">
           <div className="flex flex-col md:flex-row gap-6 items-center">
             <Card className="w-full md:w-1/3 shadow-sm border-none rounded-3xl overflow-hidden bg-white">
-               <CardHeader className="p-8 pb-4">
-                 <CardTitle className="text-[10px] font-black uppercase text-slate-400">Entity Selection</CardTitle>
-               </CardHeader>
+               <CardHeader className="p-8 pb-4"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Entity Selection</CardTitle></CardHeader>
                <CardContent className="p-8 pt-0 space-y-6">
                   <Select value={selectedSellerId} onValueChange={handleSellerSelect}>
-                    <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50 focus:ring-primary">
-                      <SelectValue placeholder="WHICH SELLER?" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl">
-                      {activeSellers.map((s) => (
-                        <SelectItem key={s.id} value={s.id} className="font-bold py-4 uppercase text-xs">{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
+                    <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50 focus:ring-primary"><SelectValue placeholder="WHICH SELLER?" /></SelectTrigger>
+                    <SelectContent className="rounded-2xl">{activeSellers.map((s) => (<SelectItem key={s.id} value={s.id} className="font-bold py-4 uppercase text-xs">{s.name}</SelectItem>))}</SelectContent>
                   </Select>
                   {authenticatedSellerId && (
-                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px] border-primary/20 text-primary">
-                      <Download className="w-4 h-4" /> Export Report (PDF)
-                    </Button>
+                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px] border-primary/20 text-primary"><Download className="w-4 h-4" /> Export Report (PDF)</Button>
                   )}
                </CardContent>
             </Card>
-
             {authenticatedSellerId && (
               <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
                 <Card className="shadow-sm border-none rounded-3xl bg-white group hover:shadow-xl transition-all duration-500">
@@ -1195,25 +1135,15 @@ export default function Dashboard() {
                   <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout</CardTitle></CardHeader>
                   <CardContent className="p-6 pt-0">
                     <div className="text-4xl font-black tracking-tighter text-white">£{sellerStats.payout.toFixed(2)}</div>
-                    <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50">
-                      <Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}
-                    </div>
+                    <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50"><Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}</div>
                   </CardContent>
                 </Card>
               </div>
             )}
           </div>
-
           {authenticatedSellerId && (
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-               <CardHeader className="p-8 border-b bg-slate-50/20">
-                  <div className="flex justify-between items-center">
-                    <CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">
-                      Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}
-                    </div>
-                  </div>
-               </CardHeader>
+               <CardHeader className="p-8 border-b bg-slate-50/20"><div className="flex justify-between items-center"><CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle><div className="text-[10px] font-bold text-slate-400 uppercase">Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}</div></div></CardHeader>
                <CardContent className="p-0">
                   <Table>
                     <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead><TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Net</TableHead></TableRow></TableHeader>
@@ -1236,33 +1166,19 @@ export default function Dashboard() {
       )}
 
       <footer className="py-12 border-t mt-12 bg-slate-50/50 rounded-t-3xl text-center space-y-4">
-        <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">
-          {LEGAL_STATEMENT}
-        </p>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-          &copy; {currentYear} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard
-        </p>
+        <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">{LEGAL_STATEMENT}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">&copy; {currentYear} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard</p>
       </footer>
 
+      {/* Dialogs */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
             <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Lock className="w-8 h-8" /></div>
             <DialogTitle className="text-2xl font-black uppercase">Access Locked</DialogTitle>
           </DialogHeader>
-          <div className="py-6">
-            <Input 
-              type="password" 
-              placeholder="ENCRYPTION KEY..." 
-              className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()}
-            />
-          </div>
-          <DialogFooter className="flex-col gap-3">
-            <Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Unlock Vault</Button>
-          </DialogFooter>
+          <div className="py-6"><Input type="password" placeholder="ENCRYPTION KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} /></div>
+          <DialogFooter className="flex-col gap-3"><Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Unlock Vault</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1272,19 +1188,8 @@ export default function Dashboard() {
             <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><KeyRound className="w-8 h-8" /></div>
             <DialogTitle className="text-2xl font-black uppercase">Identity Verification</DialogTitle>
           </DialogHeader>
-          <div className="py-6">
-            <Input 
-              type="password" 
-              placeholder="ENTER PERSONAL KEY..." 
-              className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl"
-              value={sellerPasswordInput}
-              onChange={(e) => setSellerPasswordInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSellerPasswordSubmit()}
-            />
-          </div>
-          <DialogFooter>
-            <Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Authorize Access</Button>
-          </DialogFooter>
+          <div className="py-6"><Input type="password" placeholder="ENTER PERSONAL KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl" value={sellerPasswordInput} onChange={(e) => setSellerPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSellerPasswordSubmit()} /></div>
+          <DialogFooter><Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Authorize Access</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1293,25 +1198,15 @@ export default function Dashboard() {
           <DialogHeader className="items-center text-center">
             <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Wallet className="w-8 h-8" /></div>
             <DialogTitle className="text-2xl font-black uppercase">Settle Payout</DialogTitle>
-            <DialogDescription className="text-slate-500 font-bold">
-              Confirm settlement of £{settlementBatch?.total.toFixed(2)} to {settlementBatch?.sellerId}. 
-              This will mark all associated cards as paid.
-            </DialogDescription>
+            <DialogDescription className="text-slate-500 font-bold">Confirm settlement of £{settlementBatch?.total.toFixed(2)} to {settlementBatch?.sellerId}.</DialogDescription>
           </DialogHeader>
           <div className="py-8 grid grid-cols-2 gap-4">
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('cash')}>
-               <Banknote className="w-6 h-6" />
-               <span className="font-black uppercase text-[10px]">Cash</span>
-             </Button>
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('transfer')}>
-               <Send className="w-6 h-6" />
-               <span className="font-black uppercase text-[10px]">Transfer</span>
-             </Button>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('cash')}><Banknote className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Cash</span></Button>
+             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('transfer')}><Send className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Transfer</span></Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Sale Dialog (Manager Only) */}
       <Dialog open={!!editingSale} onOpenChange={(open) => !open && setEditingSale(null)}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
@@ -1319,41 +1214,17 @@ export default function Dashboard() {
             <DialogTitle className="text-2xl font-black uppercase">Edit Transaction</DialogTitle>
           </DialogHeader>
           <div className="py-6 space-y-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400">Card Name / Detail</label>
-              <Input 
-                value={editSaleCard}
-                onChange={(e) => setEditSaleCard(e.target.value)}
-                className="h-12 rounded-xl px-4 font-bold border-slate-100"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400">Sale Price (£)</label>
-              <Input 
-                type="number"
-                step="0.01"
-                value={editSalePrice}
-                onChange={(e) => setEditSalePrice(e.target.value)}
-                className="h-12 rounded-xl px-4 font-black border-slate-100"
-              />
-            </div>
+            <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Name / Detail</label><Input value={editSaleCard} onChange={(e) => setEditSaleCard(e.target.value)} className="h-12 rounded-xl px-4 font-bold border-slate-100" /></div>
+            <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Sale Price (£)</label><Input type="number" step="0.01" value={editSalePrice} onChange={(e) => setEditSalePrice(e.target.value)} className="h-12 rounded-xl px-4 font-black border-slate-100" /></div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400">Assigned Seller</label>
               <Select value={editSaleSellerId} onValueChange={setEditSaleSellerId}>
-                <SelectTrigger className="h-12 rounded-xl px-4 font-bold border-slate-100">
-                  <SelectValue placeholder="Change seller" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {sellers.map((s) => (
-                    <SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger className="h-12 rounded-xl px-4 font-bold border-slate-100"><SelectValue placeholder="Change seller" /></SelectTrigger>
+                <SelectContent className="rounded-xl">{sellers.map((s) => (<SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>))}</SelectContent>
               </Select>
             </div>
           </div>
-          <DialogFooter>
-            <Button onClick={handleSaveEditSale} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Save Changes</Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={handleSaveEditSale} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Save Changes</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
