@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -375,20 +374,6 @@ export default function Dashboard() {
     };
   }, [profileId, shopTotals, expenses, combinedSalesData, isMounted]);
 
-  const chartData = useMemo(() => {
-    if (!financialSummary || !isMounted || !selectedDate) return [];
-    try {
-      return [{
-        name: format(parseISO(selectedDate), "MMM d"),
-        inHouse: financialSummary.inHouseRevenue,
-        commissions: financialSummary.sellerCommission,
-        expenses: financialSummary.expenses
-      }];
-    } catch {
-      return [];
-    }
-  }, [financialSummary, selectedDate, isMounted]);
-
   const payoutForecast = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
     const today = startOfDay(new Date());
@@ -699,11 +684,8 @@ export default function Dashboard() {
 
       {/* Manager Profile Wrapper with Tabs */}
       {profileId === 'manager' && (
-        <Tabs defaultValue="intel" className="space-y-8 animate-in slide-in-from-top-4 duration-700">
+        <Tabs defaultValue="search" className="space-y-8 animate-in slide-in-from-top-4 duration-700">
           <TabsList className="bg-white border rounded-2xl h-14 p-1 shadow-sm gap-1 overflow-x-auto justify-start md:justify-center">
-            <TabsTrigger value="intel" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
-              <Activity className="w-3.5 h-3.5" /> Intelligence
-            </TabsTrigger>
             <TabsTrigger value="search" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Search className="w-3.5 h-3.5" /> Search Audit
             </TabsTrigger>
@@ -717,77 +699,6 @@ export default function Dashboard() {
               <Scale className="w-3.5 h-3.5" /> Master Ledger
             </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="intel" className="space-y-8 focus-visible:outline-none">
-            {financialSummary && (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card className="border-none shadow-sm rounded-2xl bg-white border-l-4 border-l-primary">
-                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader>
-                    <CardContent className="p-5 pt-0">
-                      <div className="text-2xl font-black text-slate-900">£{(financialSummary.intake ?? 0).toFixed(2)}</div>
-                      <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 uppercase mt-1"><ArrowUpRight className="w-2 h-2 text-green-500" /> Daily Revenue (Till)</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white">
-                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Running Sales</CardTitle></CardHeader>
-                    <CardContent className="p-5 pt-0">
-                      <div className="text-2xl font-black text-primary">£{(financialSummary.totalDailyVolume ?? 0).toFixed(2)}</div>
-                      <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">Logged Card Sales</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white">
-                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Daily Net Profit</CardTitle></CardHeader>
-                    <CardContent className="p-5 pt-0">
-                      <div className="text-2xl font-black text-green-600">£{(financialSummary.netProfit ?? 0).toFixed(2)}</div>
-                      <div className="text-[8px] font-bold text-slate-400 uppercase mt-1">After Costs</div>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-primary text-white">
-                    <CardHeader className="p-5 pb-1"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Cash Position</CardTitle></CardHeader>
-                    <CardContent className="p-5 pt-0">
-                      <div className="text-2xl font-black text-white">£{(financialSummary.runningCashPosition ?? 0).toFixed(2)}</div>
-                      <div className="text-[8px] font-bold text-white/40 uppercase mt-1">Running Balance</div>
-                    </CardContent>
-                  </Card>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-                    <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase flex items-center justify-between">Daily Revenue Composition<Badge variant="outline" className="text-[8px] font-black bg-white">TREND ANALYSIS</Badge></CardTitle></CardHeader>
-                    <CardContent className="p-8">
-                      <ChartContainer config={chartConfig} className="h-[250px] w-full">
-                        <BarChart data={chartData}>
-                          <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Bar dataKey="inHouse" fill="var(--color-inHouse)" radius={4} name="In-House Gross" />
-                          <Bar dataKey="commissions" fill="var(--color-commissions)" radius={4} name="NC Commission" />
-                          <Bar dataKey="expenses" fill="var(--color-expenses)" radius={4} name="Expenses" />
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                  </Card>
-                  <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-                    <CardHeader className="p-8 border-b bg-slate-50/20"><CardTitle className="text-sm font-black uppercase">Revenue Split</CardTitle></CardHeader>
-                    <CardContent className="p-8 space-y-6">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-400">In-House Sales</span><span className="font-black text-primary">£{financialSummary.inHouseRevenue.toFixed(2)}</span></div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${Math.min(100, (financialSummary.inHouseRevenue / (financialSummary.intake || 1)) * 100)}%` }} /></div>
-                        <div className="flex justify-between items-center pt-2"><span className="text-[10px] font-black uppercase text-slate-400">External Seller Gross</span><span className="font-black text-slate-700">£{financialSummary.sellerGross.toFixed(2)}</span></div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-slate-300" style={{ width: `${Math.min(100, (financialSummary.sellerGross / (financialSummary.intake || 1)) * 100)}%` }} /></div>
-                        <Separator />
-                        <div className="bg-slate-50 p-4 rounded-2xl space-y-2">
-                          <div className="flex justify-between items-center"><span className="text-[9px] font-bold uppercase text-slate-400">NC Commission Earned</span><span className="font-black text-green-600">£{financialSummary.sellerCommission.toFixed(2)}</span></div>
-                          <div className="flex justify-between items-center"><span className="text-[9px] font-bold uppercase text-slate-400">Owed to Sellers</span><span className="font-black text-destructive">£{financialSummary.sellerLiability.toFixed(2)}</span></div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </>
-            )}
-          </TabsContent>
 
           <TabsContent value="search" className="space-y-8 focus-visible:outline-none">
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
@@ -1311,4 +1222,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
