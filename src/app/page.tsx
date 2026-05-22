@@ -49,7 +49,8 @@ import {
   MoreVertical,
   UserPlus,
   ShieldAlert,
-  Save
+  Save,
+  Filter
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -171,6 +172,7 @@ export default function Dashboard() {
   const [authenticatedSellerId, setAuthenticatedSellerId] = useState<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { 
     sellers, 
@@ -296,6 +298,19 @@ export default function Dashboard() {
       payoutDate: selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A"
     };
   }, [sellerDailySalesRaw, selectedDate, isMounted]);
+
+  const filteredSalesData = useMemo(() => {
+    if (!searchQuery) return [];
+    const query = searchQuery.toLowerCase();
+    return combinedSalesData.filter(sale => {
+      const seller = sellers.find(s => s.id === sale.sellerId);
+      return (
+        sale.cardName.toLowerCase().includes(query) ||
+        (seller?.name || "").toLowerCase().includes(query) ||
+        sale.saleDate.includes(query)
+      );
+    });
+  }, [combinedSalesData, searchQuery, sellers]);
 
   const financialSummary = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
@@ -685,17 +700,20 @@ export default function Dashboard() {
       {/* Manager Profile Wrapper with Tabs */}
       {profileId === 'manager' && (
         <Tabs defaultValue="intel" className="space-y-8 animate-in slide-in-from-top-4 duration-700">
-          <TabsList className="bg-white border rounded-2xl h-14 p-1 shadow-sm gap-1">
-            <TabsTrigger value="intel" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+          <TabsList className="bg-white border rounded-2xl h-14 p-1 shadow-sm gap-1 overflow-x-auto justify-start md:justify-center">
+            <TabsTrigger value="intel" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Activity className="w-3.5 h-3.5" /> Intelligence
             </TabsTrigger>
-            <TabsTrigger value="payouts" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <TabsTrigger value="search" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
+              <Search className="w-3.5 h-3.5" /> Search Audit
+            </TabsTrigger>
+            <TabsTrigger value="payouts" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Wallet className="w-3.5 h-3.5" /> Settlements
             </TabsTrigger>
-            <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Users className="w-3.5 h-3.5" /> Sellers
             </TabsTrigger>
-            <TabsTrigger value="audit" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-6 data-[state=active]:bg-primary data-[state=active]:text-white">
+            <TabsTrigger value="audit" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Scale className="w-3.5 h-3.5" /> Master Ledger
             </TabsTrigger>
           </TabsList>
@@ -769,6 +787,69 @@ export default function Dashboard() {
                 </div>
               </>
             )}
+          </TabsContent>
+
+          <TabsContent value="search" className="space-y-8 focus-visible:outline-none">
+            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Search className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Search Vault Database</CardTitle>
+                  </div>
+                  <div className="relative w-full md:w-96">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input 
+                      placeholder="Search items, sellers, or dates (YYYY-MM-DD)..." 
+                      className="pl-10 h-11 rounded-xl font-bold border-slate-100 focus:ring-primary"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-slate-50/50">
+                    <TableRow>
+                      <TableHead className="pl-8 font-black uppercase text-[10px] h-14">Date</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Seller</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Item Details</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Price</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">NC Comm</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Status</TableHead>
+                      <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {searchQuery ? (
+                      filteredSalesData.length > 0 ? (
+                        filteredSalesData.map((sale) => (
+                          <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16 transition-colors">
+                            <TableCell className="pl-8 font-mono text-[10px] font-bold text-slate-400">{sale.saleDate}</TableCell>
+                            <TableCell><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
+                            <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
+                            <TableCell className="font-black text-slate-900">£{sale.price.toFixed(2)}</TableCell>
+                            <TableCell className="font-black text-green-600">£{(sale.commission || 0).toFixed(2)}</TableCell>
+                            <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
+                            <TableCell className="text-right pr-8">
+                               <div className="flex items-center justify-end gap-1">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                               </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow><TableCell colSpan={7} className="h-48 text-center text-slate-400 italic">No matches found for "{searchQuery}".</TableCell></TableRow>
+                      )
+                    ) : (
+                      <TableRow><TableCell colSpan={7} className="h-48 text-center text-slate-400 italic">Enter a query above to search the master database.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="payouts" className="focus-visible:outline-none">
@@ -1034,7 +1115,7 @@ export default function Dashboard() {
             <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
                 <Select value={entrySellerId} onValueChange={setEntrySellerId}>
-                  <SelectTrigger className="bg-white h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
+                  <SelectTrigger className="h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
                     <SelectValue placeholder="Select seller" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
@@ -1230,3 +1311,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
