@@ -608,7 +608,7 @@ export default function Dashboard() {
             className="h-14 w-auto object-contain"
             priority
           />
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1 ml-0.5">Professional Transaction Oversight</p>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1 ml-0.5">Sales and Trade-in Tracker</p>
         </div>
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <DropdownMenu>
