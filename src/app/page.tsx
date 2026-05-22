@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay } from "date-fns";
 import { 
   Plus, 
@@ -103,21 +104,6 @@ type ProfileType = 'manager' | 'staff' | 'seller' | 'finance';
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
 const LEGAL_STATEMENT = "Newtons collectables is a trading names for journey together tcg Ltd company house number 16503957";
-
-const chartConfig = {
-  inHouse: {
-    label: "In-House Revenue",
-    color: "hsl(var(--primary))",
-  },
-  commissions: {
-    label: "Seller Commissions",
-    color: "hsl(var(--chart-2))",
-  },
-  expenses: {
-    label: "Expenses",
-    color: "hsl(var(--destructive))",
-  },
-} satisfies ChartConfig;
 
 const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, 
@@ -310,40 +296,6 @@ export default function Dashboard() {
       );
     });
   }, [combinedSalesData, searchQuery, sellers]);
-
-  const financialSummary = useMemo(() => {
-    if (profileId !== 'manager' || !isMounted) return null;
-
-    const totalSellerGross = allDailySalesRaw.reduce((acc, s) => acc + s.price, 0);
-    const totalSellerCommission = allDailySalesRaw.reduce((acc, s) => acc + (s.commission || 0), 0);
-    const totalSellerPayoutLiability = totalSellerGross - totalSellerCommission;
-    
-    const shopIntake = currentDayFinance?.totalIntake || 0;
-    const inHouseRevenue = Math.max(0, shopIntake - totalSellerGross);
-    
-    const totalExpenses = currentDayExpenses.reduce((acc, e) => acc + e.amount, 0);
-    
-    const settlementsPaidToday = combinedSalesData.reduce((acc, s) => {
-      const isPaidToday = s.payoutStatus === 'paid' && s.paidAt && s.paidAt.startsWith(selectedDate);
-      return isPaidToday ? acc + (s.price - (s.commission || 0)) : acc;
-    }, 0);
-
-    const netProfit = inHouseRevenue + totalSellerCommission - totalExpenses;
-    const runningCashPosition = shopIntake - totalExpenses - settlementsPaidToday;
-
-    return {
-      intake: shopIntake,
-      inHouseRevenue,
-      sellerGross: totalSellerGross,
-      sellerCommission: totalSellerCommission,
-      sellerLiability: totalSellerPayoutLiability,
-      expenses: totalExpenses,
-      settlementsPaid: settlementsPaidToday,
-      netProfit,
-      runningCashPosition,
-      totalDailyVolume: totalSellerGross 
-    };
-  }, [profileId, allDailySalesRaw, currentDayFinance, currentDayExpenses, combinedSalesData, selectedDate, isMounted]);
 
   const globalAudit = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
@@ -638,10 +590,15 @@ export default function Dashboard() {
     >
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="flex flex-col">
-          <h1 className="text-3xl font-black tracking-tighter text-slate-900 flex items-center gap-2">
-            <span className="text-primary italic">NC:</span> Sales Tracker
-          </h1>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 ml-1">Professional Transaction Oversight</p>
+          <Image 
+            src="https://i.ibb.co/DfhyWPJV/Untitled-12-February-2026-at-13-11-20-1.png" 
+            alt="NC Tracker Logo" 
+            width={240} 
+            height={70} 
+            className="h-14 w-auto object-contain"
+            priority
+          />
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1 ml-0.5">Professional Transaction Oversight</p>
         </div>
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <DropdownMenu>
@@ -694,9 +651,6 @@ export default function Dashboard() {
             </TabsTrigger>
             <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Users className="w-3.5 h-3.5" /> Sellers
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
-              <Scale className="w-3.5 h-3.5" /> Master Ledger
             </TabsTrigger>
           </TabsList>
 
@@ -921,23 +875,6 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          <TabsContent value="audit" className="focus-visible:outline-none">
-            {globalAudit && (
-              <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-1000 pb-20">
-                <div className="flex items-center gap-3 mb-8"><Scale className="w-6 h-6 text-primary" /><h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Master Financial Ledger</h2></div>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Recorded Sales</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-primary">£{globalAudit.totalSellerGross.toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Total Shop Intake</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-slate-900">£{globalAudit.totalIntake.toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">In-House Rev</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-blue-600">£{globalAudit.totalInHouseRevenue.toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-green-600">£{globalAudit.totalCommission.toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-slate-400">Expenses</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-destructive">£{globalAudit.totalExpenses.toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-slate-900 text-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/40">Running Liquidity</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className={`text-xl font-black ${globalAudit.currentLiquidity < 0 ? 'text-destructive' : 'text-white'}`}>£{(globalAudit.currentLiquidity ?? 0).toFixed(2)}</div></CardContent></Card>
-                  <Card className="border-none shadow-sm rounded-2xl bg-primary text-white"><CardHeader className="p-4 pb-1"><CardTitle className="text-[9px] font-black uppercase text-white/60">Global P&L</CardTitle></CardHeader><CardContent className="p-4 pt-0"><div className="text-xl font-black text-white">£{(globalAudit.netProfit ?? 0).toFixed(2)}</div></CardContent></Card>
-                </div>
-              </div>
-            )}
           </TabsContent>
         </Tabs>
       )}
