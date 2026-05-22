@@ -50,7 +50,9 @@ import {
   UserPlus,
   ShieldAlert,
   Save,
-  Filter
+  Filter,
+  ShoppingCart,
+  Zap
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -84,10 +86,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Cell, CartesianGrid, Legend } from "recharts";
 
-import { useSales, Seller, ShopTotal, Expense, Sale } from "@/hooks/use-sales";
+import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -99,7 +99,7 @@ import { useToast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ProfileType = 'manager' | 'staff' | 'seller' | 'finance';
+type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -109,7 +109,8 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, 
   staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   
   seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  
-  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },   
+  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },
+  trade: { primary: "262 83% 58%", ring: "262 83% 58%" },   
 };
 
 function aggregateSales(salesList: Sale[]) {
@@ -165,6 +166,7 @@ export default function Dashboard() {
     combinedSalesData, 
     shopTotals, 
     expenses, 
+    tradeIns,
     isLoaded, 
     addSeller, 
     updateSeller, 
@@ -175,8 +177,10 @@ export default function Dashboard() {
     setShopTotal, 
     deleteShopTotal,
     addExpense, 
-    deleteExpense 
-  } = useSales(profileId === 'seller' ? 'staff' : profileId);
+    deleteExpense,
+    addTradeIn,
+    deleteTradeIn
+  } = useSales(profileId);
   
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
@@ -200,6 +204,12 @@ export default function Dashboard() {
 
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerComm, setNewSellerComm] = useState("10");
+
+  // Trade-in Calculator State
+  const [tradeInItems, setTradeInItems] = useState<TradeInItem[]>([]);
+  const [tradeInItemName, setTradeInItemName] = useState("");
+  const [tradeInItemValue, setTradeInItemValue] = useState("");
+  const [tradeInCustomer, setTradeInCustomer] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -245,6 +255,40 @@ export default function Dashboard() {
     if (!isMounted || !selectedDate) return [];
     return expenses.filter(e => e.date === selectedDate);
   }, [expenses, selectedDate, isMounted]);
+
+  const currentDayTradeIns = useMemo(() => {
+    if (!isMounted || !selectedDate) return [];
+    return tradeIns.filter(t => t.date === selectedDate);
+  }, [tradeIns, selectedDate, isMounted]);
+
+  const tradeMarketTotal = useMemo(() => tradeInItems.reduce((acc, item) => acc + item.value, 0), [tradeInItems]);
+  const tradeOfferAmount = useMemo(() => tradeMarketTotal * 0.8, [tradeMarketTotal]);
+  const cashOfferAmount = useMemo(() => tradeMarketTotal * 0.7, [tradeMarketTotal]);
+
+  const handleAddTradeInItem = () => {
+    const val = parseFloat(tradeInItemValue);
+    if (tradeInItemName && !isNaN(val)) {
+      setTradeInItems([...tradeInItems, { name: tradeInItemName, value: val }]);
+      setTradeInItemName("");
+      setTradeInItemValue("");
+    }
+  };
+
+  const handleSaveTradeIn = (type: 'trade' | 'cash') => {
+    if (tradeInItems.length === 0) return;
+    const amount = type === 'trade' ? tradeOfferAmount : cashOfferAmount;
+    addTradeIn({
+      date: selectedDate,
+      items: tradeInItems,
+      marketTotal: tradeMarketTotal,
+      offerAmount: amount,
+      offerType: type,
+      customerName: tradeInCustomer
+    });
+    setTradeInItems([]);
+    setTradeInCustomer("");
+    toast({ title: "Trade-in Logged", description: `Record saved as ${type === 'trade' ? 'Store Credit' : 'Cash Buyout'}.` });
+  };
 
   const dailySalesData = useMemo(() => {
     if (!isMounted || !selectedDate) return {};
@@ -297,35 +341,6 @@ export default function Dashboard() {
     });
   }, [combinedSalesData, searchQuery, sellers]);
 
-  const globalAudit = useMemo(() => {
-    if (profileId !== 'manager' || !isMounted) return null;
-
-    const totalIntake = shopTotals.reduce((acc, t) => acc + t.totalIntake, 0);
-    const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
-    const totalCommission = combinedSalesData.reduce((acc, s) => acc + (s.commission || 0), 0);
-    const totalSellerGross = combinedSalesData.reduce((acc, s) => acc + s.price, 0);
-    const totalInHouseRevenue = Math.max(0, totalIntake - totalSellerGross);
-    const totalPaidSettlements = combinedSalesData.reduce((acc, s) => {
-      return s.payoutStatus === 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
-    }, 0);
-    const totalUnpaidLiability = combinedSalesData.reduce((acc, s) => {
-      return s.payoutStatus !== 'paid' ? acc + (s.price - (s.commission || 0)) : acc;
-    }, 0);
-    const netProfit = totalInHouseRevenue + totalCommission - totalExpenses;
-    const currentLiquidity = totalIntake - totalExpenses - totalPaidSettlements;
-
-    return {
-      totalIntake,
-      totalExpenses,
-      totalCommission,
-      totalInHouseRevenue,
-      totalSellerGross,
-      netProfit,
-      currentLiquidity,
-      unpaidLiability: totalUnpaidLiability
-    };
-  }, [profileId, shopTotals, expenses, combinedSalesData, isMounted]);
-
   const payoutForecast = useMemo(() => {
     if (profileId !== 'manager' || !isMounted) return null;
     const today = startOfDay(new Date());
@@ -368,11 +383,6 @@ export default function Dashboard() {
 
     return forecast;
   }, [combinedSalesData, sellers, profileId, isMounted]);
-
-  const predictedFridayPosition = useMemo(() => {
-    if (!globalAudit || !payoutForecast) return 0;
-    return (globalAudit.currentLiquidity || 0) - (payoutForecast.thisFriday.total || 0);
-  }, [globalAudit, payoutForecast]);
 
   const handleProfileSwitch = (newProfile: ProfileType) => {
     if (newProfile === 'manager' && !isManagerAuthenticated) {
@@ -609,6 +619,7 @@ export default function Dashboard() {
                   {profileId === 'staff' && <UserCircle className="w-4 h-4 text-primary" />}
                   {profileId === 'seller' && <User className="w-4 h-4 text-primary" />}
                   {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
+                  {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
                   VAULT: {profileId}
                 </span>
               </Button>
@@ -616,6 +627,7 @@ export default function Dashboard() {
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 border-primary/10 shadow-xl">
               <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MANAGER</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('trade')} className="gap-3 py-3 font-bold"><Zap className="w-5 h-5 text-purple-600" /> TRADE-IN</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3 font-bold"><Receipt className="w-5 h-5 text-amber-600" /> FINANCE</DropdownMenuItem>
               {isManagerAuthenticated && (
@@ -638,6 +650,106 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Trade-in Vault Profile */}
+      {profileId === 'trade' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-700">
+           {/* Calculator Card */}
+           <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                 <div className="flex items-center gap-3">
+                    <Calculator className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Trade-in Running Calculator</CardTitle>
+                 </div>
+              </CardHeader>
+              <CardContent className="p-8 space-y-8">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-400">Card Name</label>
+                       <Input placeholder="e.g., PSA 10 Lugia" value={tradeInItemName} onChange={(e) => setTradeInItemName(e.target.value)} className="h-12 rounded-xl font-bold" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-400">Market Value (£)</label>
+                       <div className="flex gap-2">
+                          <Input type="number" placeholder="0.00" value={tradeInItemValue} onChange={(e) => setTradeInItemValue(e.target.value)} className="h-12 rounded-xl font-black" />
+                          <Button onClick={handleAddTradeInItem} className="h-12 w-12 rounded-xl bg-primary"><Plus className="w-5 h-5" /></Button>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="border rounded-2xl overflow-hidden bg-slate-50/30">
+                    <Table>
+                       <TableHeader><TableRow><TableHead className="font-black uppercase text-[10px]">Item</TableHead><TableHead className="font-black uppercase text-[10px] text-right">Value</TableHead></TableRow></TableHeader>
+                       <TableBody>
+                          {tradeInItems.map((item, idx) => (
+                             <TableRow key={idx} className="h-12 border-slate-100">
+                                <TableCell className="font-bold text-xs uppercase">{item.name}</TableCell>
+                                <TableCell className="text-right font-black">£{item.value.toFixed(2)}</TableCell>
+                             </TableRow>
+                          ))}
+                          {tradeInItems.length === 0 && <TableRow><TableCell colSpan={2} className="h-24 text-center text-slate-400 italic text-[10px]">No items added to evaluation</TableCell></TableRow>}
+                       </TableBody>
+                    </Table>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+                    <div className="bg-slate-900 rounded-2xl p-6 text-white text-center">
+                       <p className="text-[9px] font-black uppercase text-white/40 mb-1">Market Total</p>
+                       <p className="text-3xl font-black">£{tradeMarketTotal.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center group cursor-pointer hover:bg-primary hover:text-white transition-all" onClick={() => handleSaveTradeIn('trade')}>
+                       <p className="text-[9px] font-black uppercase text-primary group-hover:text-white/60 mb-1">Store Credit (80%)</p>
+                       <p className="text-3xl font-black text-primary group-hover:text-white">£{tradeOfferAmount.toFixed(2)}</p>
+                       <p className="text-[8px] font-bold uppercase mt-2 opacity-50">Log Evaluation</p>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center group cursor-pointer hover:bg-emerald-600 hover:text-white transition-all" onClick={() => handleSaveTradeIn('cash')}>
+                       <p className="text-[9px] font-black uppercase text-emerald-600 group-hover:text-white/60 mb-1">Cash Buyout (70%)</p>
+                       <p className="text-3xl font-black text-emerald-600 group-hover:text-white">£{cashOfferAmount.toFixed(2)}</p>
+                       <p className="text-[8px] font-bold uppercase mt-2 opacity-50">Log Evaluation</p>
+                    </div>
+                 </div>
+              </CardContent>
+           </Card>
+
+           {/* History Card */}
+           <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                 <div className="flex items-center gap-3">
+                    <History className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Recent Buybacks</CardTitle>
+                 </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                 <ScrollArea className="h-[500px]">
+                    <div className="divide-y">
+                       {currentDayTradeIns.map((trade) => (
+                          <div key={trade.id} className="p-6 space-y-3 hover:bg-slate-50/50 transition-colors group">
+                             <div className="flex justify-between items-start">
+                                <div>
+                                   <Badge variant={trade.offerType === 'trade' ? 'default' : 'outline'} className="text-[8px] font-black uppercase mb-1">
+                                      {trade.offerType === 'trade' ? 'Store Credit' : 'Cash Purchase'}
+                                   </Badge>
+                                   <p className="font-black text-slate-900">£{trade.offerAmount.toFixed(2)}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 opacity-0 group-hover:opacity-100" onClick={() => deleteTradeIn(trade.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                             </div>
+                             <div className="space-y-1">
+                                {trade.items.map((it, i) => (
+                                   <div key={i} className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                                      <span>{it.name}</span>
+                                      <span>£{it.value.toFixed(2)}</span>
+                                   </div>
+                                ))}
+                             </div>
+                          </div>
+                       ))}
+                       {currentDayTradeIns.length === 0 && <div className="p-12 text-center text-slate-300 italic text-xs">No records for {selectedDate}</div>}
+                    </div>
+                 </ScrollArea>
+              </CardContent>
+           </Card>
+        </div>
+      )}
 
       {/* Manager Profile Wrapper with Tabs */}
       {profileId === 'manager' && (
@@ -719,7 +831,7 @@ export default function Dashboard() {
 
           <TabsContent value="payouts" className="focus-visible:outline-none">
             {payoutForecast && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white border-l-8 border-l-primary">
                      <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -762,20 +874,6 @@ export default function Dashboard() {
                           ))}
                           {payoutForecast.nextFriday.count === 0 && <p className="text-center text-[10px] italic text-slate-400 py-4">No upcoming settlements</p>}
                         </ScrollArea>
-                     </CardContent>
-                  </Card>
-
-                  <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-slate-900 text-white border-l-8 border-l-primary">
-                     <CardHeader className="bg-white/5 px-6 py-4 border-b border-white/10 flex flex-row items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-primary text-white p-2 rounded-xl"><TrendingUp className="w-4 h-4" /></div>
-                          <div><CardTitle className="text-lg font-black uppercase text-white">Friday Prediction</CardTitle><p className="text-[10px] text-white/40 font-bold uppercase">Estimated Balance</p></div>
-                        </div>
-                     </CardHeader>
-                     <CardContent className="p-6 flex flex-col justify-center items-center h-[calc(100%-80px)]">
-                        <p className="text-[10px] font-black uppercase text-white/40 mb-2">Net After Friday Payouts</p>
-                        <div className={`text-4xl font-black ${predictedFridayPosition < 0 ? 'text-destructive' : 'text-white'}`}>£{(predictedFridayPosition ?? 0).toFixed(2)}</div>
-                        <p className="text-[8px] font-bold uppercase text-white/20 mt-4 text-center">Based on Running Liquidity minus This Friday's Liabilities</p>
                      </CardContent>
                   </Card>
               </div>

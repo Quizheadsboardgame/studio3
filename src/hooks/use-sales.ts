@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -53,12 +52,26 @@ export type Expense = {
   category?: string;
 };
 
+export type TradeInItem = {
+  name: string;
+  value: number;
+};
+
+export type TradeIn = {
+  id?: string;
+  date: string;
+  items: TradeInItem[];
+  marketTotal: number;
+  offerAmount: number;
+  offerType: 'trade' | 'cash';
+  customerName?: string;
+};
+
 export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  // Sellers and Sales are generally shared between staff and finance to allow tracking
-  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : profileId);
+  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : (profileId === 'trade' ? 'staff' : profileId));
 
   const sellersRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -90,19 +103,25 @@ export function useSales(profileId: string) {
     return collection(db, "shop-finance-expenses");
   }, [db, user]);
 
+  const tradeInsRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "trade-ins");
+  }, [db, user]);
+
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
   const { data: staffSellersData, isLoading: staffSellersLoading } = useCollection<Seller>(staffSellersRef);
   const { data: shopTotalsData } = useCollection<ShopTotal>(shopTotalsRef);
   const { data: expensesData } = useCollection<Expense>(expensesRef);
+  const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
   const combinedSalesData = useMemo(() => {
     const normalize = (s: Sale) => ({
       ...s,
-      commission: s.price < 0 ? 0 : s.commission
+      commission: (s.price || 0) < 0 ? 0 : (s.commission || 0)
     });
     
     const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: effectiveProfile }));
@@ -122,7 +141,7 @@ export function useSales(profileId: string) {
     staff.forEach(s => {
       if (!all.find(existing => existing.id === s.id)) all.push(s);
     });
-    return all.sort((a, b) => a.name.localeCompare(b.name));
+    return all.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [sellersData, staffSellersData, effectiveProfile]);
 
   const salesByDate = useMemo(() => {
@@ -242,12 +261,27 @@ export function useSales(profileId: string) {
     deleteDocumentNonBlocking(doc(expensesRef, expenseId));
   }, [expensesRef]);
 
+  const addTradeIn = useCallback((trade: Omit<TradeIn, 'id'>) => {
+    if (!tradeInsRef) return;
+    const docRef = doc(tradeInsRef);
+    setDocumentNonBlocking(docRef, {
+      ...trade,
+      id: docRef.id
+    }, { merge: true });
+  }, [tradeInsRef]);
+
+  const deleteTradeIn = useCallback((tradeId: string) => {
+    if (!tradeInsRef) return;
+    deleteDocumentNonBlocking(doc(tradeInsRef, tradeId));
+  }, [tradeInsRef]);
+
   return {
     sellers,
     sales: salesByDate,
     combinedSalesData,
     shopTotals: shopTotalsData || [],
     expenses: expensesData || [],
+    tradeIns: tradeInsData || [],
     isLoaded,
     addSeller,
     updateSeller,
@@ -258,6 +292,8 @@ export function useSales(profileId: string) {
     setShopTotal,
     deleteShopTotal,
     addExpense,
-    deleteExpense
+    deleteExpense,
+    addTradeIn,
+    deleteTradeIn
   };
 }
