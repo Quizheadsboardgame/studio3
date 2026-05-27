@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -857,15 +856,16 @@ export default function Dashboard() {
                           )}
                         </div>
                         
-                        <div className="h-24 flex flex-col items-center justify-center">
+                        <div className="h-40 flex flex-col items-center justify-center">
                           <p className="text-white/30 font-black uppercase text-[12px] mb-2">{winnerIdx + 1}{winnerIdx === 0 ? 'st' : winnerIdx === 1 ? 'nd' : 'rd'} Place</p>
                           {revealedWinners[winnerIdx] ? (
-                            <div className="animate-in slide-in-from-bottom-4 duration-700 text-center">
+                            <div className="animate-in zoom-in-50 duration-700 text-center flex flex-col items-center gap-3">
+                              <Trophy className={cn("w-14 h-14 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]", 
+                                winnerIdx === 0 ? "text-yellow-400" : 
+                                winnerIdx === 1 ? "text-slate-300" : 
+                                "text-amber-700"
+                              )} />
                               <p className="text-primary text-3xl font-black uppercase tracking-tight">{winners[winnerIdx]}</p>
-                              <div className="mt-2 inline-flex items-center gap-1.5 bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
-                                <Trophy className="w-3 h-3 text-primary" />
-                                <span className="text-primary font-black uppercase text-[8px]">Winner Selected</span>
-                              </div>
                             </div>
                           ) : (
                             <p className="text-white/10 font-black uppercase text-xl animate-pulse">Waiting...</p>
