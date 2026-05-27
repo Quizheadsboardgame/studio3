@@ -377,6 +377,21 @@ export default function Dashboard() {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (isCountdownMode && countdown === 0) {
       setIsCountdownMode(false);
+      // Automatic staggered reveal sequence
+      const runRevealSequence = async () => {
+        setIsDrawing(true);
+        // Reveal index 2 (3rd), then 1 (2nd), then 0 (1st)
+        for (const idx of [2, 1, 0]) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          setRevealedWinners(prev => {
+            const next = [...prev];
+            next[idx] = true;
+            return next;
+          });
+        }
+        setIsDrawing(false);
+      };
+      runRevealSequence();
     }
     return () => clearTimeout(timer);
   }, [isCountdownMode, countdown]);
