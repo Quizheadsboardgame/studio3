@@ -56,7 +56,8 @@ import {
   Zap,
   Ticket,
   Trophy,
-  Dices
+  Dices,
+  Timer
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -167,7 +168,7 @@ export default function Dashboard() {
   
   const [profileId, setProfileId] = useState<ProfileType>('staff');
   const [isMounted, setIsMounted] = useState(false);
-  const [currentYear, setCurrentYear] = useState<number>(2025);
+  const [currentYear, setCurrentYear] = useState<number>(new Date().getFullYear());
   
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -233,6 +234,8 @@ export default function Dashboard() {
   const [raffleName, setRaffleName] = useState("");
   const [raffleTickets, setRaffleTickets] = useState("");
   const [isDrawMode, setIsDrawMode] = useState(false);
+  const [isCountdownMode, setIsCountdownMode] = useState(false);
+  const [countdown, setCountdown] = useState(10);
   const [winners, setWinners] = useState<string[]>([]);
   const [revealedWinners, setRevealedWinners] = useState<boolean[]>([false, false, false]);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -247,7 +250,6 @@ export default function Dashboard() {
     setIsMounted(true);
     const now = new Date();
     setSelectedDate(format(now, "yyyy-MM-dd"));
-    setCurrentYear(now.getFullYear());
     const expiry = localStorage.getItem(AUTH_EXPIRY_KEY);
     if (expiry && parseInt(expiry) > now.getTime()) {
       setIsManagerAuthenticated(true);
@@ -337,7 +339,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleStartDraw = () => {
+  const handleStartDrawSequence = () => {
     if (currentDayRaffleEntries.length === 0) {
       toast({ variant: "destructive", title: "Error", description: "No entries for this date." });
       return;
@@ -355,23 +357,32 @@ export default function Dashboard() {
       return;
     }
 
-    // Pick 3 unique-ish winners (same person can win twice if they have enough tickets)
+    // Pick 3 winners (allowing duplicates if they have tickets)
     const picked: string[] = [];
-    let tempPool = [...pool];
     for (let i = 0; i < 3; i++) {
-      const idx = Math.floor(Math.random() * tempPool.length);
-      picked.push(tempPool[idx]);
-      tempPool.splice(idx, 1);
+      const idx = Math.floor(Math.random() * pool.length);
+      picked.push(pool[idx]);
     }
 
     setWinners(picked);
     setRevealedWinners([false, false, false]);
+    setIsCountdownMode(true);
     setIsDrawMode(true);
-    setIsDrawing(false);
+    setCountdown(10);
   };
 
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isCountdownMode && countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (isCountdownMode && countdown === 0) {
+      setIsCountdownMode(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isCountdownMode, countdown]);
+
   const handleRevealNext = (index: number) => {
-    if (isDrawing) return;
+    if (isDrawing || isCountdownMode) return;
     setIsDrawing(true);
     setTimeout(() => {
       const newReveals = [...revealedWinners];
@@ -456,14 +467,14 @@ export default function Dashboard() {
           forecast.thisFriday.total += net;
           forecast.thisFriday.count += 1;
           if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-          forecast.thisFriday.sellers[sellerName].total += net;
+          forecast.thisFriday.total += net;
           forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
           forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         } else if (!isAfter(maturityDate, nextFridayDate)) {
           forecast.nextFriday.total += net;
           forecast.nextFriday.count += 1;
           if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-          forecast.nextFriday.sellers[sellerName].total += net;
+          forecast.nextFriday.total += net;
           forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
           forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         }
@@ -775,7 +786,7 @@ export default function Dashboard() {
                     <History className="w-5 h-5 text-primary" />
                     <CardTitle className="text-sm font-black uppercase">Current Entries</CardTitle>
                   </div>
-                  <Button onClick={handleStartDraw} className="h-10 px-6 rounded-xl bg-slate-900 gap-2 font-black uppercase text-[10px]"><Dices className="w-3.5 h-3.5" /> Start Draw Sequence</Button>
+                  <Button onClick={handleStartDrawSequence} className="h-10 px-6 rounded-xl bg-slate-900 gap-2 font-black uppercase text-[10px]"><Dices className="w-3.5 h-3.5" /> Start Draw Sequence</Button>
                 </CardHeader>
                 <CardContent className="p-0">
                   <Table>
@@ -802,47 +813,59 @@ export default function Dashboard() {
               <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
               <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-600/10 blur-[120px] rounded-full animate-pulse" />
 
-              <div className="space-y-4 relative">
-                <h2 className="text-white text-5xl font-black uppercase tracking-tighter">Live Raffle Draw</h2>
-                <p className="text-white/40 font-black uppercase tracking-widest text-[10px]">Customer Facing Mode &bull; {selectedDate}</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-5xl relative">
-                {[2, 1, 0].map((winnerIdx) => (
-                  <div key={winnerIdx} className="flex flex-col items-center space-y-6">
-                    <div className="relative group">
-                      <Pokeball isOpen={revealedWinners[winnerIdx]} className={cn("mx-auto", isDrawing ? "animate-bounce" : "")} />
-                      {!revealedWinners[winnerIdx] && (
-                        <Button 
-                          onClick={() => handleRevealNext(winnerIdx)} 
-                          disabled={isDrawing || (winnerIdx < 2 && !revealedWinners[winnerIdx + 1])}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                      )}
-                    </div>
-                    
-                    <div className="h-24 flex flex-col items-center justify-center">
-                      <p className="text-white/30 font-black uppercase text-[12px] mb-2">{winnerIdx + 1}{winnerIdx === 0 ? 'st' : winnerIdx === 1 ? 'nd' : 'rd'} Place</p>
-                      {revealedWinners[winnerIdx] ? (
-                        <div className="animate-in slide-in-from-bottom-4 duration-700 text-center">
-                          <p className="text-primary text-3xl font-black uppercase tracking-tight">{winners[winnerIdx]}</p>
-                          <div className="mt-2 inline-flex items-center gap-1.5 bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
-                            <Trophy className="w-3 h-3 text-primary" />
-                            <span className="text-primary font-black uppercase text-[8px]">Winner Selected</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-white/10 font-black uppercase text-xl animate-pulse">Waiting...</p>
-                      )}
-                    </div>
+              {isCountdownMode ? (
+                <div className="space-y-8 animate-in zoom-in-50 duration-500">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-150 animate-pulse" />
+                    <h2 className="text-white text-[12rem] font-black leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]">{countdown}</h2>
                   </div>
-                ))}
-              </div>
+                  <p className="text-primary text-2xl font-black uppercase tracking-[0.5em] animate-bounce">Generating Winners...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4 relative">
+                    <h2 className="text-white text-5xl font-black uppercase tracking-tighter">Live Raffle Draw</h2>
+                    <p className="text-white/40 font-black uppercase tracking-widest text-[10px]">Customer Facing Mode &bull; {selectedDate}</p>
+                  </div>
 
-              <div className="flex gap-4 pt-8 relative">
-                <Button onClick={() => setIsDrawMode(false)} variant="outline" className="border-white/10 text-white hover:bg-white/10 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Close Vault</Button>
-                <Button onClick={handleStartDraw} className="bg-primary hover:bg-primary/90 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Reset Draw Pool</Button>
-              </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-5xl relative">
+                    {[2, 1, 0].map((winnerIdx) => (
+                      <div key={winnerIdx} className="flex flex-col items-center space-y-6">
+                        <div className="relative group">
+                          <Pokeball isOpen={revealedWinners[winnerIdx]} className={cn("mx-auto", isDrawing ? "animate-bounce" : "")} />
+                          {!revealedWinners[winnerIdx] && (
+                            <Button 
+                              onClick={() => handleRevealNext(winnerIdx)} 
+                              disabled={isDrawing}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                          )}
+                        </div>
+                        
+                        <div className="h-24 flex flex-col items-center justify-center">
+                          <p className="text-white/30 font-black uppercase text-[12px] mb-2">{winnerIdx + 1}{winnerIdx === 0 ? 'st' : winnerIdx === 1 ? 'nd' : 'rd'} Place</p>
+                          {revealedWinners[winnerIdx] ? (
+                            <div className="animate-in slide-in-from-bottom-4 duration-700 text-center">
+                              <p className="text-primary text-3xl font-black uppercase tracking-tight">{winners[winnerIdx]}</p>
+                              <div className="mt-2 inline-flex items-center gap-1.5 bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
+                                <Trophy className="w-3 h-3 text-primary" />
+                                <span className="text-primary font-black uppercase text-[8px]">Winner Selected</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-white/10 font-black uppercase text-xl animate-pulse">Waiting...</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-4 pt-8 relative">
+                    <Button onClick={() => setIsDrawMode(false)} variant="outline" className="border-white/10 text-white hover:bg-white/10 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Close Vault</Button>
+                    <Button onClick={handleStartDrawSequence} className="bg-primary hover:bg-primary/90 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Reset Draw Pool</Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
