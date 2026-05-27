@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -67,11 +68,18 @@ export type TradeIn = {
   customerName?: string;
 };
 
+export type RaffleEntry = {
+  id?: string;
+  name: string;
+  tickets: number;
+  date: string;
+};
+
 export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : (profileId === 'trade' ? 'staff' : profileId));
+  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : (profileId === 'trade' ? 'staff' : (profileId === 'raffle' ? 'staff' : profileId)));
 
   const sellersRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -108,6 +116,11 @@ export function useSales(profileId: string) {
     return collection(db, "trade-ins");
   }, [db, user]);
 
+  const raffleEntriesRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "raffle-entries");
+  }, [db, user]);
+
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
@@ -115,6 +128,7 @@ export function useSales(profileId: string) {
   const { data: shopTotalsData } = useCollection<ShopTotal>(shopTotalsRef);
   const { data: expensesData } = useCollection<Expense>(expensesRef);
   const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
+  const { data: raffleEntriesData } = useCollection<RaffleEntry>(raffleEntriesRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
@@ -275,6 +289,22 @@ export function useSales(profileId: string) {
     deleteDocumentNonBlocking(doc(tradeInsRef, tradeId));
   }, [tradeInsRef]);
 
+  const addRaffleEntry = useCallback((name: string, tickets: number, date: string) => {
+    if (!raffleEntriesRef) return;
+    const docRef = doc(raffleEntriesRef);
+    setDocumentNonBlocking(docRef, {
+      id: docRef.id,
+      name,
+      tickets,
+      date
+    }, { merge: true });
+  }, [raffleEntriesRef]);
+
+  const deleteRaffleEntry = useCallback((entryId: string) => {
+    if (!raffleEntriesRef) return;
+    deleteDocumentNonBlocking(doc(raffleEntriesRef, entryId));
+  }, [raffleEntriesRef]);
+
   return {
     sellers,
     sales: salesByDate,
@@ -282,6 +312,7 @@ export function useSales(profileId: string) {
     shopTotals: shopTotalsData || [],
     expenses: expensesData || [],
     tradeIns: tradeInsData || [],
+    raffleEntries: raffleEntriesData || [],
     isLoaded,
     addSeller,
     updateSeller,
@@ -294,6 +325,8 @@ export function useSales(profileId: string) {
     addExpense,
     deleteExpense,
     addTradeIn,
-    deleteTradeIn
+    deleteTradeIn,
+    addRaffleEntry,
+    deleteRaffleEntry
   };
 }

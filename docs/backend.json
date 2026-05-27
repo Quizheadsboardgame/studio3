@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Seller": {
@@ -132,6 +133,17 @@
         "customerName": { "type": "string" }
       },
       "required": ["date", "marketTotal", "offerAmount", "offerType"]
+    },
+    "RaffleEntry": {
+      "title": "Raffle Entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tickets": { "type": "number" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["name", "tickets", "date"]
     }
   },
   "auth": {
@@ -180,6 +192,13 @@
         "definition": {
           "entityName": "TradeIn",
           "description": "Trade-in and buyback records."
+        }
+      },
+      {
+        "path": "/raffle-entries/{entryId}",
+        "definition": {
+          "entityName": "RaffleEntry",
+          "description": "Individual raffle ticket entries."
         }
       }
     ]

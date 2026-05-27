@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -52,7 +53,10 @@ import {
   Save,
   Filter,
   ShoppingCart,
-  Zap
+  Zap,
+  Ticket,
+  Trophy,
+  Dices
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -87,19 +91,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem } from "@/hooks/use-sales";
+import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem, RaffleEntry } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
   initiateAnonymousSignIn
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 // PDF Generation
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade';
+type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade' | 'raffle';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -110,8 +115,24 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   
   seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  
   finance: { primary: "38 92% 50%", ring: "38 92% 50%" },
-  trade: { primary: "262 83% 58%", ring: "262 83% 58%" },   
+  trade: { primary: "262 83% 58%", ring: "262 83% 58%" },
+  raffle: { primary: "0 84.2% 60.2%", ring: "0 84.2% 60.2%" },
 };
+
+function Pokeball({ isOpen, className }: { isOpen: boolean; className?: string }) {
+  return (
+    <div className={cn("relative w-24 h-24 transition-all duration-700", className)}>
+      <div className={cn("absolute inset-0 rounded-full border-4 border-black bg-white overflow-hidden transition-all duration-700", isOpen ? "translate-y-[-100%] opacity-0" : "translate-y-0")}>
+        <div className="h-1/2 bg-red-600 border-b-4 border-black" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-4 border-black bg-white z-10" />
+      </div>
+      <div className={cn("absolute inset-0 rounded-full border-4 border-black bg-white overflow-hidden transition-all duration-700", isOpen ? "translate-y-[100%] opacity-0" : "translate-y-0")}>
+        <div className="h-full bg-white" />
+        <div className="absolute top-[-16px] left-1/2 -translate-x-1/2 w-8 h-8 rounded-full border-4 border-black bg-white z-10" />
+      </div>
+    </div>
+  );
+}
 
 function aggregateSales(salesList: Sale[]) {
   const packsMap: Record<string, Sale> = {};
@@ -167,6 +188,7 @@ export default function Dashboard() {
     shopTotals, 
     expenses, 
     tradeIns,
+    raffleEntries,
     isLoaded, 
     addSeller, 
     updateSeller, 
@@ -179,7 +201,9 @@ export default function Dashboard() {
     addExpense, 
     deleteExpense,
     addTradeIn,
-    deleteTradeIn
+    deleteTradeIn,
+    addRaffleEntry,
+    deleteRaffleEntry
   } = useSales(profileId);
   
   const [newSaleCard, setNewSaleCard] = useState("");
@@ -204,6 +228,14 @@ export default function Dashboard() {
 
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerComm, setNewSellerComm] = useState("10");
+
+  // Raffle State
+  const [raffleName, setRaffleName] = useState("");
+  const [raffleTickets, setRaffleTickets] = useState("");
+  const [isDrawMode, setIsDrawMode] = useState(false);
+  const [winners, setWinners] = useState<string[]>([]);
+  const [revealedWinners, setRevealedWinners] = useState<boolean[]>([false, false, false]);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // Trade-in Calculator State
   const [tradeInItems, setTradeInItems] = useState<TradeInItem[]>([]);
@@ -261,6 +293,11 @@ export default function Dashboard() {
     return tradeIns.filter(t => t.date === selectedDate);
   }, [tradeIns, selectedDate, isMounted]);
 
+  const currentDayRaffleEntries = useMemo(() => {
+    if (!isMounted || !selectedDate) return [];
+    return raffleEntries.filter(r => r.date === selectedDate);
+  }, [raffleEntries, selectedDate, isMounted]);
+
   const tradeMarketTotal = useMemo(() => tradeInItems.reduce((acc, item) => acc + item.value, 0), [tradeInItems]);
   const tradeOfferAmount = useMemo(() => tradeMarketTotal * 0.8, [tradeMarketTotal]);
   const cashOfferAmount = useMemo(() => tradeMarketTotal * 0.7, [tradeMarketTotal]);
@@ -288,6 +325,60 @@ export default function Dashboard() {
     setTradeInItems([]);
     setTradeInCustomer("");
     toast({ title: "Trade-in Logged", description: `Record saved as ${type === 'trade' ? 'Store Credit' : 'Cash Buyout'}.` });
+  };
+
+  const handleAddRaffleEntry = () => {
+    const count = parseInt(raffleTickets);
+    if (raffleName && !isNaN(count) && count > 0) {
+      addRaffleEntry(raffleName, count, selectedDate);
+      setRaffleName("");
+      setRaffleTickets("");
+      toast({ title: "Entry Recorded", description: `${raffleName} added with ${count} tickets.` });
+    }
+  };
+
+  const handleStartDraw = () => {
+    if (currentDayRaffleEntries.length === 0) {
+      toast({ variant: "destructive", title: "Error", description: "No entries for this date." });
+      return;
+    }
+
+    const pool: string[] = [];
+    currentDayRaffleEntries.forEach(entry => {
+      for (let i = 0; i < entry.tickets; i++) {
+        pool.push(entry.name);
+      }
+    });
+
+    if (pool.length < 3) {
+      toast({ variant: "destructive", title: "Error", description: "At least 3 tickets required for a full draw." });
+      return;
+    }
+
+    // Pick 3 unique-ish winners (same person can win twice if they have enough tickets)
+    const picked: string[] = [];
+    let tempPool = [...pool];
+    for (let i = 0; i < 3; i++) {
+      const idx = Math.floor(Math.random() * tempPool.length);
+      picked.push(tempPool[idx]);
+      tempPool.splice(idx, 1);
+    }
+
+    setWinners(picked);
+    setRevealedWinners([false, false, false]);
+    setIsDrawMode(true);
+    setIsDrawing(false);
+  };
+
+  const handleRevealNext = (index: number) => {
+    if (isDrawing) return;
+    setIsDrawing(true);
+    setTimeout(() => {
+      const newReveals = [...revealedWinners];
+      newReveals[index] = true;
+      setRevealedWinners(newReveals);
+      setIsDrawing(false);
+    }, 1000);
   };
 
   const dailySalesData = useMemo(() => {
@@ -620,6 +711,7 @@ export default function Dashboard() {
                   {profileId === 'seller' && <User className="w-4 h-4 text-primary" />}
                   {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
                   {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
+                  {profileId === 'raffle' && <Ticket className="w-4 h-4 text-primary" />}
                   VAULT: {profileId}
                 </span>
               </Button>
@@ -628,6 +720,7 @@ export default function Dashboard() {
               <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MANAGER</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('trade')} className="gap-3 py-3 font-bold"><Zap className="w-5 h-5 text-purple-600" /> TRADE-IN</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('raffle')} className="gap-3 py-3 font-bold"><Ticket className="w-5 h-5 text-red-600" /> RAFFLE</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3 font-bold"><Receipt className="w-5 h-5 text-amber-600" /> FINANCE</DropdownMenuItem>
               {isManagerAuthenticated && (
@@ -650,6 +743,110 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Raffle Vault Profile */}
+      {profileId === 'raffle' && (
+        <div className="space-y-8 animate-in zoom-in-95 duration-700">
+          {!isDrawMode ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                <CardHeader className="p-8 border-b bg-slate-50/20">
+                  <div className="flex items-center gap-3">
+                    <Ticket className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Add Raffle Entry</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Customer Name</label>
+                    <Input placeholder="e.g., Ash Ketchum" value={raffleName} onChange={(e) => setRaffleName(e.target.value)} className="h-12 rounded-xl font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Tickets Purchased</label>
+                    <Input type="number" placeholder="10" value={raffleTickets} onChange={(e) => setRaffleTickets(e.target.value)} className="h-12 rounded-xl font-black" />
+                  </div>
+                  <Button onClick={handleAddRaffleEntry} className="w-full h-12 rounded-xl bg-primary font-black uppercase text-xs">Log Entry</Button>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                <CardHeader className="p-8 border-b bg-slate-50/20 flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <History className="w-5 h-5 text-primary" />
+                    <CardTitle className="text-sm font-black uppercase">Current Entries</CardTitle>
+                  </div>
+                  <Button onClick={handleStartDraw} className="h-10 px-6 rounded-xl bg-slate-900 gap-2 font-black uppercase text-[10px]"><Dices className="w-3.5 h-3.5" /> Start Draw Sequence</Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader><TableRow><TableHead className="pl-8 font-black uppercase text-[10px]">Name</TableHead><TableHead className="font-black uppercase text-[10px]">Tickets</TableHead><TableHead className="text-right pr-8 font-black uppercase text-[10px]">Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {currentDayRaffleEntries.map((entry) => (
+                        <TableRow key={entry.id} className="h-16">
+                          <TableCell className="pl-8 font-bold uppercase text-xs">{entry.name}</TableCell>
+                          <TableCell className="font-black text-primary">{entry.tickets}</TableCell>
+                          <TableCell className="text-right pr-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => deleteRaffleEntry(entry.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {currentDayRaffleEntries.length === 0 && <TableRow><TableCell colSpan={3} className="h-48 text-center text-slate-400 italic">No entries for {selectedDate}</TableCell></TableRow>}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="bg-slate-900 rounded-[3rem] p-12 text-center space-y-12 animate-in zoom-in-95 duration-1000 min-h-[600px] flex flex-col justify-center items-center relative overflow-hidden">
+              {/* Animated Background Element */}
+              <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-600/10 blur-[120px] rounded-full animate-pulse" />
+
+              <div className="space-y-4 relative">
+                <h2 className="text-white text-5xl font-black uppercase tracking-tighter">Live Raffle Draw</h2>
+                <p className="text-white/40 font-black uppercase tracking-widest text-[10px]">Customer Facing Mode &bull; {selectedDate}</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-5xl relative">
+                {[2, 1, 0].map((winnerIdx) => (
+                  <div key={winnerIdx} className="flex flex-col items-center space-y-6">
+                    <div className="relative group">
+                      <Pokeball isOpen={revealedWinners[winnerIdx]} className={cn("mx-auto", isDrawing ? "animate-bounce" : "")} />
+                      {!revealedWinners[winnerIdx] && (
+                        <Button 
+                          onClick={() => handleRevealNext(winnerIdx)} 
+                          disabled={isDrawing || (winnerIdx < 2 && !revealedWinners[winnerIdx + 1])}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      )}
+                    </div>
+                    
+                    <div className="h-24 flex flex-col items-center justify-center">
+                      <p className="text-white/30 font-black uppercase text-[12px] mb-2">{winnerIdx + 1}{winnerIdx === 0 ? 'st' : winnerIdx === 1 ? 'nd' : 'rd'} Place</p>
+                      {revealedWinners[winnerIdx] ? (
+                        <div className="animate-in slide-in-from-bottom-4 duration-700 text-center">
+                          <p className="text-primary text-3xl font-black uppercase tracking-tight">{winners[winnerIdx]}</p>
+                          <div className="mt-2 inline-flex items-center gap-1.5 bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
+                            <Trophy className="w-3 h-3 text-primary" />
+                            <span className="text-primary font-black uppercase text-[8px]">Winner Selected</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-white/10 font-black uppercase text-xl animate-pulse">Waiting...</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-4 pt-8 relative">
+                <Button onClick={() => setIsDrawMode(false)} variant="outline" className="border-white/10 text-white hover:bg-white/10 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Close Vault</Button>
+                <Button onClick={handleStartDraw} className="bg-primary hover:bg-primary/90 rounded-2xl h-12 px-8 font-black uppercase text-[10px]">Reset Draw Pool</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Trade-in Vault Profile */}
       {profileId === 'trade' && (
