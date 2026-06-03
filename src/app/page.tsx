@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -66,7 +67,8 @@ import {
   Store,
   Shield,
   Lightbulb,
-  Target
+  Target,
+  ListPlus
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -101,7 +103,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem, RaffleEntry } from "@/hooks/use-sales";
+import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem, RaffleEntry, InventoryItem } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -203,6 +205,10 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Goal Calculator State
+  const [targetWeeklyPayout, setTargetWeeklyPayout] = useState("100");
+  const [calcCommission, setCalcCommission] = useState("10");
+
   const { 
     sellers, 
     sales, 
@@ -211,6 +217,7 @@ export default function Dashboard() {
     expenses, 
     tradeIns,
     raffleEntries,
+    inventory,
     isLoaded, 
     addSeller, 
     updateSeller, 
@@ -224,8 +231,10 @@ export default function Dashboard() {
     addTradeIn,
     deleteTradeIn,
     addRaffleEntry,
-    deleteRaffleEntry
-  } = useSales(profileId);
+    deleteRaffleEntry,
+    addInventoryItem,
+    deleteInventoryItem
+  } = useSales(profileId, profileId === 'seller' ? authenticatedSellerId : (profileId === 'staff' ? selectedSellerId : null));
   
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
@@ -261,9 +270,8 @@ export default function Dashboard() {
   const [tradeInItemValue, setTradeInItemValue] = useState("");
   const [tradeInCustomer, setTradeInCustomer] = useState("");
 
-  // Goal Calculator State
-  const [targetWeeklyPayout, setTargetWeeklyPayout] = useState("100");
-  const [calcCommission, setCalcCommission] = useState("10");
+  const [newInventoryName, setNewInventoryName] = useState("");
+  const [newInventoryPrice, setNewInventoryPrice] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -288,6 +296,16 @@ export default function Dashboard() {
       setEntrySellerId(activeSellers[0].id);
     }
   }, [activeSellers, entrySellerId]);
+
+  useEffect(() => {
+    // When a seller is authenticated in the Seller Vault, pre-set the commission
+    if (profileId === 'seller' && authenticatedSellerId) {
+      const seller = sellers.find(s => s.id === authenticatedSellerId);
+      if (seller) {
+        setCalcCommission(seller.defaultCommission?.toString() || "10");
+      }
+    }
+  }, [profileId, authenticatedSellerId, sellers]);
 
   const currentDayFinance = useMemo(() => {
     if (!isMounted || !selectedDate) return null;
@@ -621,17 +639,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleSellerPasswordSubmit = () => {
-    const seller = sellers.find(s => s.id === selectedSellerId);
-    if (seller && seller.password === sellerPasswordInput) {
-      setAuthenticatedSellerId(selectedSellerId);
-      setIsSellerPasswordDialogOpen(false);
-      toast({ title: "Authorized", description: `Welcome, ${seller.name}.` });
-    } else {
-      toast({ variant: "destructive", title: "Access Denied", description: "Incorrect key." });
-    }
-  };
-
   const handleAddSale = () => {
     const priceNum = parseFloat(newSalePrice);
     if (entrySellerId && newSaleCard.trim() && !isNaN(priceNum)) {
@@ -716,6 +723,27 @@ export default function Dashboard() {
       title: seller.archived ? "Seller Restored" : "Seller Archived", 
       description: `${seller.name} status updated.` 
     });
+  };
+
+  const handleSellerPasswordSubmit = () => {
+    const seller = sellers.find(s => s.id === selectedSellerId);
+    if (seller && seller.password === sellerPasswordInput) {
+      setAuthenticatedSellerId(selectedSellerId);
+      setIsSellerPasswordDialogOpen(false);
+      toast({ title: "Authorized", description: `Welcome, ${seller.name}.` });
+    } else {
+      toast({ variant: "destructive", title: "Access Denied", description: "Incorrect key." });
+    }
+  };
+
+  const handleAddInventory = () => {
+    const price = parseFloat(newInventoryPrice);
+    if (newInventoryName && !isNaN(price)) {
+      addInventoryItem(newInventoryName, price);
+      setNewInventoryName("");
+      setNewInventoryPrice("");
+      toast({ title: "Item Preloaded", description: "Added to your quick-list." });
+    }
   };
 
   const handleDownloadPDF = () => {
@@ -919,71 +947,6 @@ export default function Dashboard() {
                  <p className="text-slate-500 text-sm font-medium leading-relaxed">View your average weekly payout and "Selling Since" milestones. Understand your selling velocity and refine your inventory strategy with hard data.</p>
                </div>
              </Card>
-           </div>
-
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <Card className="lg:col-span-2 bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group">
-                 <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse transition-all duration-1000" />
-                 <div className="relative z-10 space-y-8">
-                    <div className="flex items-center gap-4">
-                       <div className="p-3 bg-white/10 rounded-2xl"><Target className="w-6 h-6 text-primary" /></div>
-                       <h2 className="text-3xl font-black uppercase tracking-tighter">Earnings Goal Calculator</h2>
-                    </div>
-                    <p className="text-white/60 font-medium">Set your target weekly payout and see exactly what gross sales volume you need to hit.</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-                       <div className="space-y-4">
-                          <div className="space-y-2">
-                             <label className="text-[10px] font-black uppercase text-white/40">Target Weekly Payout (£)</label>
-                             <Input 
-                                type="number" 
-                                value={targetWeeklyPayout} 
-                                onChange={(e) => setTargetWeeklyPayout(e.target.value)} 
-                                className="h-14 bg-white/5 border-white/10 text-white font-black text-xl rounded-2xl focus-visible:ring-primary"
-                             />
-                          </div>
-                          <div className="space-y-2">
-                             <label className="text-[10px] font-black uppercase text-white/40">Commission Tier (%)</label>
-                             <Select value={calcCommission} onValueChange={setCalcCommission}>
-                                <SelectTrigger className="h-14 bg-white/5 border-white/10 text-white font-black rounded-2xl">
-                                   <SelectValue placeholder="10%" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-2xl">
-                                   <SelectItem value="5" className="font-bold">5% (Elite)</SelectItem>
-                                   <SelectItem value="10" className="font-bold">10% (Standard)</SelectItem>
-                                   <SelectItem value="15" className="font-bold">15% (Managed)</SelectItem>
-                                   <SelectItem value="20" className="font-bold">20% (Full Service)</SelectItem>
-                                </SelectContent>
-                             </Select>
-                          </div>
-                       </div>
-
-                       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center space-y-2">
-                          <p className="text-[10px] font-black uppercase text-primary tracking-widest">Weekly Sales Required</p>
-                          <p className="text-5xl font-black tracking-tighter">£{incomeGoalCalc.grossSalesNeeded.toFixed(2)}</p>
-                          <p className="text-[9px] font-bold text-white/30 uppercase pt-2">Est. NC Commission: £{incomeGoalCalc.commissionPaid.toFixed(2)}</p>
-                       </div>
-                    </div>
-                 </div>
-              </Card>
-
-              <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-8 flex flex-col justify-center">
-                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-amber-50 rounded-2xl"><Lightbulb className="w-6 h-6 text-amber-500" /></div>
-                    <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Pro Seller Tips</h2>
-                 </div>
-                 <div className="space-y-6">
-                    <div className="space-y-2">
-                       <p className="text-[10px] font-black uppercase text-primary">Sweet Spot Pricing</p>
-                       <p className="text-slate-600 font-bold leading-relaxed">Cards priced between <span className="text-slate-900 font-black">£5 and £25</span> sell the fastest on our floor. High-velocity inventory is the key to consistent weekly payouts.</p>
-                    </div>
-                    <Separator className="bg-slate-100" />
-                    <div className="space-y-2">
-                       <p className="text-[10px] font-black uppercase text-primary">Inventory Freshness</p>
-                       <p className="text-slate-600 font-bold leading-relaxed">Sellers who refresh their stock <span className="text-slate-900 font-black">twice a week</span> see 40% higher turnover than monthly listers.</p>
-                    </div>
-                 </div>
-              </Card>
            </div>
 
            <Card className="bg-slate-900 rounded-[3rem] p-12 text-center overflow-hidden relative group">
@@ -1512,7 +1475,7 @@ export default function Dashboard() {
           <CardContent className="p-8 space-y-10">
             <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
-                <Select value={entrySellerId} onValueChange={setEntrySellerId}>
+                <Select value={entrySellerId} onValueChange={(val) => { setEntrySellerId(val); setSelectedSellerId(val); }}>
                   <SelectTrigger className="h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
                     <SelectValue placeholder="Select seller" />
                   </SelectTrigger>
@@ -1527,6 +1490,30 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
                 <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3></div>
+                
+                {entrySellerId && inventory.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Quick-Add Seller Inventory</p>
+                    <div className="flex flex-wrap gap-2">
+                      {inventory.map((item) => (
+                        <Button 
+                          key={item.id} 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-9 px-4 rounded-xl font-bold uppercase text-[9px] gap-2 border-primary/20 hover:bg-primary hover:text-white transition-all"
+                          onClick={() => {
+                            setNewSaleCard(item.name);
+                            setNewSalePrice(item.price.toString());
+                          }}
+                        >
+                          <Plus className="w-3 h-3" /> {item.name} (£{item.price})
+                        </Button>
+                      ))}
+                    </div>
+                    <Separator className="my-4" />
+                  </div>
+                )}
+
                 <div className="space-y-4">
                   <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
                   <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
@@ -1633,21 +1620,84 @@ export default function Dashboard() {
           </div>
 
           {authenticatedSellerId && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <Card className="shadow-sm border-none rounded-3xl bg-white p-8 flex items-center gap-6">
-                  <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-primary"><CalendarDays className="w-8 h-8" /></div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Selling Since</p>
-                    <p className="text-2xl font-black text-slate-900">{sellerLifetimeStats.since}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+               <Card className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group">
+                  <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse transition-all duration-1000" />
+                  <div className="relative z-10 space-y-8">
+                     <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/10 rounded-2xl"><Target className="w-6 h-6 text-primary" /></div>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Earnings Goal Calculator</h2>
+                     </div>
+                     <p className="text-white/60 font-medium text-xs">Set your target weekly payout and see exactly what gross sales volume you need to hit at your <span className="text-primary font-black">{calcCommission}%</span> commission tier.</p>
+                     
+                     <div className="space-y-6">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black uppercase text-white/40">Target Weekly Payout (£)</label>
+                           <Input 
+                              type="number" 
+                              value={targetWeeklyPayout} 
+                              onChange={(e) => setTargetWeeklyPayout(e.target.value)} 
+                              className="h-14 bg-white/5 border-white/10 text-white font-black text-xl rounded-2xl focus-visible:ring-primary"
+                           />
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center space-y-2">
+                           <p className="text-[10px] font-black uppercase text-primary tracking-widest">Weekly Sales Required</p>
+                           <p className="text-5xl font-black tracking-tighter">£{incomeGoalCalc.grossSalesNeeded.toFixed(2)}</p>
+                           <p className="text-[9px] font-bold text-white/30 uppercase pt-2">Est. NC Commission: £{incomeGoalCalc.commissionPaid.toFixed(2)}</p>
+                        </div>
+                     </div>
                   </div>
                </Card>
-               <Card className="shadow-sm border-none rounded-3xl bg-white p-8 flex items-center gap-6">
-                  <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingIcon className="w-8 h-8" /></div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Avg. Weekly Payout</p>
-                    <p className="text-2xl font-black text-slate-900">£{sellerLifetimeStats.avgWeekly.toFixed(2)}</p>
-                  </div>
+
+               <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-8">
+                 <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                       <div className="p-3 bg-blue-50 rounded-2xl"><ListPlus className="w-6 h-6 text-blue-500" /></div>
+                       <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Preload Inventory</h2>
+                    </div>
+                 </div>
+                 <div className="space-y-4">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Add items you are bringing in to allow staff to "Quick-Add" your sales.</p>
+                    <div className="space-y-3">
+                       <Input placeholder="Card Name..." value={newInventoryName} onChange={(e) => setNewInventoryName(e.target.value)} className="h-11 rounded-xl font-bold" />
+                       <Input type="number" placeholder="Price £" value={newInventoryPrice} onChange={(e) => setNewInventoryPrice(e.target.value)} className="h-11 rounded-xl font-black" />
+                       <Button onClick={handleAddInventory} className="w-full h-11 rounded-xl bg-slate-900 font-black uppercase text-[10px]">Add to Pre-list</Button>
+                    </div>
+                    <Separator />
+                    <ScrollArea className="h-[180px]">
+                       <div className="space-y-2">
+                          {inventory.map((item) => (
+                             <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border group">
+                                <span className="font-bold text-[10px] uppercase truncate max-w-[120px]">{item.name}</span>
+                                <div className="flex items-center gap-3">
+                                   <span className="font-black text-primary text-xs">£{item.price.toFixed(2)}</span>
+                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                </div>
+                             </div>
+                          ))}
+                          {inventory.length === 0 && <p className="text-center text-[10px] italic text-slate-300 py-8">No preloaded items</p>}
+                       </div>
+                    </ScrollArea>
+                 </div>
                </Card>
+
+               <div className="space-y-6 flex flex-col h-full">
+                  <Card className="shadow-sm border-none rounded-[3rem] bg-white p-10 flex items-center gap-6 flex-1">
+                     <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-primary"><CalendarDays className="w-8 h-8" /></div>
+                     <div>
+                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Selling Since</p>
+                       <p className="text-2xl font-black text-slate-900">{sellerLifetimeStats.since}</p>
+                     </div>
+                  </Card>
+                  <Card className="shadow-sm border-none rounded-[3rem] bg-white p-10 flex items-center gap-6 flex-1">
+                     <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingIcon className="w-8 h-8" /></div>
+                     <div>
+                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Avg. Weekly Payout</p>
+                       <p className="text-2xl font-black text-slate-900">£{sellerLifetimeStats.avgWeekly.toFixed(2)}</p>
+                     </div>
+                  </Card>
+               </div>
             </div>
           )}
 

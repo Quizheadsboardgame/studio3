@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -34,6 +35,12 @@ export type Seller = {
   defaultCommission?: number;
   password?: string;
   archived?: boolean;
+};
+
+export type InventoryItem = {
+  id?: string;
+  name: string;
+  price: number;
 };
 
 export type ShopTotal = {
@@ -73,7 +80,7 @@ export type RaffleEntry = {
   date: string;
 };
 
-export function useSales(profileId: string) {
+export function useSales(profileId: string, currentSellerId?: string | null) {
   const { user } = useUser();
   const db = useFirestore();
 
@@ -119,6 +126,11 @@ export function useSales(profileId: string) {
     return collection(db, "raffle-entries");
   }, [db, user]);
 
+  const inventoryRef = useMemoFirebase(() => {
+    if (!db || !user || !currentSellerId) return null;
+    return collection(db, "profiles", "staff", "sellers", currentSellerId, "inventory");
+  }, [db, user, currentSellerId]);
+
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
@@ -127,6 +139,7 @@ export function useSales(profileId: string) {
   const { data: expensesData } = useCollection<Expense>(expensesRef);
   const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
   const { data: raffleEntriesData } = useCollection<RaffleEntry>(raffleEntriesRef);
+  const { data: inventoryData } = useCollection<InventoryItem>(inventoryRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
@@ -289,6 +302,21 @@ export function useSales(profileId: string) {
     deleteDocumentNonBlocking(doc(raffleEntriesRef, entryId));
   }, [raffleEntriesRef]);
 
+  const addInventoryItem = useCallback((name: string, price: number) => {
+    if (!inventoryRef) return;
+    const docRef = doc(inventoryRef);
+    setDocumentNonBlocking(docRef, {
+      id: docRef.id,
+      name,
+      price
+    }, { merge: true });
+  }, [inventoryRef]);
+
+  const deleteInventoryItem = useCallback((itemId: string) => {
+    if (!inventoryRef) return;
+    deleteDocumentNonBlocking(doc(inventoryRef, itemId));
+  }, [inventoryRef]);
+
   return {
     sellers,
     sales: salesByDate,
@@ -297,6 +325,7 @@ export function useSales(profileId: string) {
     expenses: expensesData || [],
     tradeIns: tradeInsData || [],
     raffleEntries: raffleEntriesData || [],
+    inventory: inventoryData || [],
     isLoaded,
     addSeller,
     updateSeller,
@@ -310,6 +339,8 @@ export function useSales(profileId: string) {
     addTradeIn,
     deleteTradeIn,
     addRaffleEntry,
-    deleteRaffleEntry
+    deleteRaffleEntry,
+    addInventoryItem,
+    deleteInventoryItem
   };
 }

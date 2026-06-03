@@ -88,6 +88,16 @@
         "sellerId"
       ]
     },
+    "InventoryItem": {
+      "title": "Inventory Item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["name", "price"]
+    },
     "ShopTotal": {
       "title": "Shop Total",
       "type": "object",
@@ -161,6 +171,13 @@
             "$ref": "#/backend/entities/Seller"
           },
           "description": "Shared seller profiles."
+        }
+      },
+      {
+        "path": "/profiles/{profileId}/sellers/{sellerId}/inventory/{itemId}",
+        "definition": {
+          "entityName": "InventoryItem",
+          "description": "Preloaded inventory for quick adding by staff."
         }
       },
       {
