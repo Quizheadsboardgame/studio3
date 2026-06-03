@@ -429,7 +429,13 @@ export default function Dashboard() {
   }, [profileId, authenticatedSellerId, dailySalesData]);
 
   const sellerDailySalesAggregated = useMemo(() => {
-    return aggregateSales(sellerDailySalesRaw);
+    const aggregated = aggregateSales(sellerDailySalesRaw);
+    let running = 0;
+    return aggregated.map(sale => {
+      const net = sale.price - (sale.commission || 0);
+      running += net;
+      return { ...sale, runningTotal: running };
+    });
   }, [sellerDailySalesRaw]);
 
   const sellerStats = useMemo(() => {
@@ -443,6 +449,22 @@ export default function Dashboard() {
       payoutDate: selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A"
     };
   }, [sellerDailySalesRaw, selectedDate, isMounted]);
+
+  const sellerLifetimeStats = useMemo(() => {
+    if (!authenticatedSellerId || !combinedSalesData) return { earned: 0, owed: 0, settled: 0 };
+    const sellerSales = combinedSalesData.filter(s => s.sellerId === authenticatedSellerId);
+    
+    return sellerSales.reduce((acc, s) => {
+      const net = s.price - (s.commission || 0);
+      acc.earned += net;
+      if (s.payoutStatus === 'paid') {
+        acc.settled += net;
+      } else {
+        acc.owed += net;
+      }
+      return acc;
+    }, { earned: 0, owed: 0, settled: 0 });
+  }, [authenticatedSellerId, combinedSalesData]);
 
   const filteredSalesData = useMemo(() => {
     if (!searchQuery) return [];
@@ -481,14 +503,14 @@ export default function Dashboard() {
           forecast.thisFriday.total += net;
           forecast.thisFriday.count += 1;
           if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-          forecast.thisFriday.total += net;
+          forecast.thisFriday.sellers[sellerName].total += net;
           forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
           forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         } else if (!isAfter(maturityDate, nextFridayDate)) {
           forecast.nextFriday.total += net;
           forecast.nextFriday.count += 1;
           if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
-          forecast.nextFriday.total += net;
+          forecast.nextFriday.sellers[sellerName].total += net;
           forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
           forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         }
@@ -673,12 +695,13 @@ export default function Dashboard() {
 
       autoTable(doc, {
         startY: 63,
-        head: [['Card Details', 'Gross Price', 'Status', 'Your Payout']],
+        head: [['Card Details', 'Gross Price', 'Status', 'Net Payout', 'Running Total']],
         body: sellerDailySalesAggregated.map(sale => [
           sale.cardName, 
           `£${sale.price.toFixed(2)}`, 
           sale.payoutStatus || 'Pending',
-          `£${(sale.price - (sale.commission || 0)).toFixed(2)}`
+          `£${(sale.price - (sale.commission || 0)).toFixed(2)}`,
+          `£${(sale as any).runningTotal.toFixed(2)}`
         ]),
         theme: 'grid',
         headStyles: { fillColor: [0, 0, 0] },
@@ -1384,17 +1407,21 @@ export default function Dashboard() {
                </CardContent>
             </Card>
             {authenticatedSellerId && (
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
                 <Card className="shadow-sm border-none rounded-3xl bg-white group hover:shadow-xl transition-all duration-500">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Gross Sales</CardTitle></CardHeader>
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Gross Sales Today</CardTitle></CardHeader>
                   <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-slate-900">£{sellerStats.total.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-white">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">NC Commission</CardTitle></CardHeader>
-                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-destructive">£{sellerStats.commission.toFixed(2)}</div></CardContent>
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Owed (Pending)</CardTitle></CardHeader>
+                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-blue-600">£{sellerLifetimeStats.owed.toFixed(2)}</div></CardContent>
+                </Card>
+                <Card className="shadow-sm border-none rounded-3xl bg-white">
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Lifetime Earned</CardTitle></CardHeader>
+                  <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-green-600">£{sellerLifetimeStats.earned.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-primary text-white">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout</CardTitle></CardHeader>
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout Today</CardTitle></CardHeader>
                   <CardContent className="p-6 pt-0">
                     <div className="text-4xl font-black tracking-tighter text-white">£{sellerStats.payout.toFixed(2)}</div>
                     <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50"><Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}</div>
@@ -1408,17 +1435,26 @@ export default function Dashboard() {
                <CardHeader className="p-8 border-b bg-slate-50/20"><div className="flex justify-between items-center"><CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle><div className="text-[10px] font-bold text-slate-400 uppercase">Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}</div></div></CardHeader>
                <CardContent className="p-0">
                   <Table>
-                    <TableHeader className="bg-slate-50/50"><TableRow><TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead><TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead><TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Net</TableHead></TableRow></TableHeader>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead>
+                        <TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead>
+                        <TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead>
+                        <TableHead className="h-12 uppercase text-[10px] font-black">Net</TableHead>
+                        <TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Running</TableHead>
+                      </TableRow>
+                    </TableHeader>
                     <TableBody>
                        {sellerDailySalesAggregated.map((sale) => (
                          <TableRow key={sale.id} className="h-16 hover:bg-slate-50/30">
                            <TableCell className="pl-8 font-bold uppercase text-xs text-slate-900">{sale.cardName}</TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                            <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
-                           <TableCell className="text-right pr-8 font-black text-primary">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+                           <TableCell className="font-black text-slate-900">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
+                           <TableCell className="text-right pr-8 font-black text-primary">£{(sale as any).runningTotal.toFixed(2)}</TableCell>
                          </TableRow>
                        ))}
-                       {sellerDailySalesAggregated.length === 0 && <TableRow><TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
+                       {sellerDailySalesAggregated.length === 0 && <TableRow><TableCell colSpan={5} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
                     </TableBody>
                   </Table>
                </CardContent>
