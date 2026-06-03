@@ -98,6 +98,31 @@
         "date": { "type": "string", "format": "date" }
       },
       "required": ["name", "tickets", "date"]
+    },
+    "WantedStock": {
+      "title": "Wanted Stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "cardName": { "type": "string" },
+        "customerName": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["cardName", "customerName", "contactNumber", "date"]
+    },
+    "StockMatch": {
+      "title": "Stock Match Notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "wantedStockId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "itemName": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["wantedStockId", "sellerId", "itemName"]
     }
   },
   "auth": {
@@ -131,6 +156,14 @@
     "/raffle-entries/{entryId}": {
       "schema": { "$ref": "#/backend/entities/RaffleEntry" },
       "description": "Individual raffle ticket entries."
+    },
+    "/wanted-stock/{id}": {
+      "schema": { "$ref": "#/backend/entities/WantedStock" },
+      "description": "Customer requests for specific stock."
+    },
+    "/stock-matches/{id}": {
+      "schema": { "$ref": "#/backend/entities/StockMatch" },
+      "description": "Notifications for managers when wanted stock is added."
     }
   }
 }

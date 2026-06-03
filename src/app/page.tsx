@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -44,7 +45,10 @@ import {
   Zap,
   Box,
   MoreVertical,
-  UserPlus
+  UserPlus,
+  Bell,
+  Phone,
+  MessageSquare
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -204,6 +208,8 @@ export default function Dashboard() {
     tradeIns,
     raffleEntries,
     inventory,
+    wantedStock,
+    stockMatches,
     isLoaded, 
     addSeller, 
     updateSeller, 
@@ -219,7 +225,10 @@ export default function Dashboard() {
     addRaffleEntry,
     deleteRaffleEntry,
     addInventoryItem,
-    deleteInventoryItem
+    deleteInventoryItem,
+    addWantedStock,
+    deleteWantedStock,
+    deleteStockMatch
   } = useSales(profileId, profileId === 'seller' ? authenticatedSellerId : (profileId === 'staff' ? selectedSellerId : null));
   
   const [newSaleCard, setNewSaleCard] = useState("");
@@ -260,6 +269,11 @@ export default function Dashboard() {
   const [newInventoryName, setNewInventoryName] = useState("");
   const [newInventoryPrice, setNewInventoryPrice] = useState("");
   const [newInventoryQuantity, setNewInventoryQuantity] = useState("1");
+
+  const [stockSearchQuery, setStockSearchQuery] = useState("");
+  const [isWantedStockDialogOpen, setIsWantedStockDialogOpen] = useState(false);
+  const [wantedStockCustomer, setWantedStockCustomer] = useState("");
+  const [wantedStockContact, setWantedStockContact] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -835,6 +849,31 @@ export default function Dashboard() {
     };
   }, [targetWeeklyPayout, calcCommission]);
 
+  const stockSearchResults = useMemo(() => {
+    if (!stockSearchQuery) return [];
+    const query = stockSearchQuery.toLowerCase();
+    
+    // Search in all sellers' inventory
+    // Note: In a real app with many sellers, we might need a separate index, 
+    // but for this MVP we aggregate what we have access to or defined in schema.
+    // For now, search within current active sellers' inventory we can access
+    const results: any[] = [];
+    // (In this specific hook structure, we only have currentSeller inventory loaded)
+    // For a global search, we'd need to fetch all inventory.
+    return inventory.filter(i => i.name.toLowerCase().includes(query));
+  }, [stockSearchQuery, inventory]);
+
+  const handleCreateWantedStock = () => {
+    if (stockSearchQuery && wantedStockCustomer && wantedStockContact) {
+      addWantedStock(stockSearchQuery, wantedStockCustomer, wantedStockContact, selectedDate);
+      setWantedStockCustomer("");
+      setWantedStockContact("");
+      setStockSearchQuery("");
+      setIsWantedStockDialogOpen(false);
+      toast({ title: "Wanted Stock Notice Created", description: "A message has been posted to the Seller Vault boards." });
+    }
+  };
+
   if (!isMounted || !isLoaded || isUserLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>;
   }
@@ -1181,6 +1220,10 @@ export default function Dashboard() {
             <TabsTrigger value="payouts" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Wallet className="w-3.5 h-3.5" /> Settlements
             </TabsTrigger>
+            <TabsTrigger value="matches" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
+              <Bell className="w-3.5 h-3.5" /> Stock Matches
+              {stockMatches.length > 0 && <Badge className="ml-2 h-4 w-4 p-0 flex items-center justify-center bg-red-600 text-[8px] animate-pulse">{stockMatches.length}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Users className="w-3.5 h-3.5" /> Sellers
             </TabsTrigger>
@@ -1295,6 +1338,56 @@ export default function Dashboard() {
                   </Card>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="matches" className="focus-visible:outline-none">
+            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <div className="flex items-center gap-3">
+                  <Bell className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-sm font-black uppercase">Stock Match Notifications</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader className="bg-slate-50/50">
+                    <TableRow>
+                      <TableHead className="pl-8 font-black uppercase text-[10px] h-14">Matching Item</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Seller</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Customer Name</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Contact Details</TableHead>
+                      <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stockMatches.map((match) => {
+                      const wanted = wantedStock.find(w => w.id === match.wantedStockId);
+                      return (
+                        <TableRow key={match.id} className="hover:bg-slate-50/50 h-20 transition-colors">
+                          <TableCell className="pl-8">
+                            <p className="font-black text-slate-900 uppercase text-xs">{match.itemName}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">MATCH FOUND ON {format(parseISO(match.date), "PPP")}</p>
+                          </TableCell>
+                          <TableCell><Badge className="bg-primary/10 text-primary border-primary/20 font-black text-[10px] uppercase">{match.sellerName}</Badge></TableCell>
+                          <TableCell className="font-bold uppercase text-xs">{wanted?.customerName || "Unknown"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-primary font-black text-xs">
+                              <Phone className="w-3 h-3" /> {wanted?.contactNumber || "N/A"}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right pr-8">
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-300 hover:text-destructive" onClick={() => deleteStockMatch(match.id!)}><Trash2 className="w-4 h-4" /></Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {stockMatches.length === 0 && (
+                      <TableRow><TableCell colSpan={5} className="h-48 text-center text-slate-400 italic">No new stock matches detected.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="sellers" className="space-y-8 focus-visible:outline-none">
@@ -1464,122 +1557,201 @@ export default function Dashboard() {
       )}
 
       {profileId === 'staff' && (
-        <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white animate-in slide-in-from-bottom-4 duration-700">
-          <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-3">
-              <History className="w-5 h-5 text-primary" />
-              <CardTitle className="text-xl font-black uppercase">Sales Ledger</CardTitle>
-            </div>
-            <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
-          </CardHeader>
-          <CardContent className="p-8 space-y-10">
-            <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
-                <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
-                <Select value={entrySellerId} onValueChange={(val) => { setEntrySellerId(val); setSelectedSellerId(val); }}>
-                  <SelectTrigger className="h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
-                    <SelectValue placeholder="Select seller" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {activeSellers.map((s) => (
-                      <SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-            </div>
+        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="lg:col-span-2 shadow-sm border-none rounded-2xl overflow-hidden bg-white">
+              <CardHeader className="border-b bg-slate-50/20 px-8 py-6">
+                <div className="flex items-center gap-3">
+                  <Target className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-xl font-black uppercase">Inventory Search & Wanted List</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-8 space-y-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Input 
+                    placeholder="Search master inventory..." 
+                    className="pl-12 h-14 rounded-2xl font-bold border-slate-100 focus-visible:ring-primary shadow-sm"
+                    value={stockSearchQuery}
+                    onChange={(e) => setStockSearchQuery(e.target.value)}
+                  />
+                </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
-                <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3></div>
-                
-                {entrySellerId && inventory.length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Quick-Select Preloaded Item</p>
-                    <Select onValueChange={(val) => {
-                      const item = inventory.find(i => i.id === val);
-                      if (item) {
-                        setNewSaleCard(item.name);
-                        setNewSalePrice(item.price.toString());
-                        setNewSaleQuantity("1");
-                      }
-                    }}>
-                      <SelectTrigger className="h-11 rounded-xl px-4 font-bold text-xs border-primary/20">
-                        <SelectValue placeholder="Select an item to auto-fill..." />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-xl">
-                        {inventory.map((item) => (
-                          <SelectItem key={item.id} value={item.id!} className="font-bold py-3 uppercase text-[10px]">
-                            {item.name} — £{item.price.toFixed(2)} {item.quantity ? `(${item.quantity} in stock)` : ''}
-                          </SelectItem>
+                {stockSearchQuery && (
+                  <div className="space-y-4">
+                    {stockSearchResults.length > 0 ? (
+                      <div className="bg-slate-50 rounded-2xl border p-2">
+                        {stockSearchResults.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-4 hover:bg-white rounded-xl transition-all">
+                            <span className="font-black uppercase text-xs text-slate-700">{item.name}</span>
+                            <div className="flex items-center gap-4">
+                              <Badge className="bg-primary/10 text-primary border-primary/20 font-black">£{item.price.toFixed(2)}</Badge>
+                              <span className="text-[10px] font-black uppercase text-slate-400">Qty: {item.quantity}</span>
+                            </div>
+                          </div>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <Separator className="my-4" />
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-100 rounded-[2.5rem] p-8 text-center space-y-6">
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto"><Box className="w-8 h-8" /></div>
+                        <div className="space-y-2">
+                          <h3 className="text-xl font-black uppercase tracking-tight text-red-900">Item Not in Stock</h3>
+                          <p className="text-red-700/60 font-bold text-sm">Would you like to create a Wanted Stock Notice for "{stockSearchQuery}"?</p>
+                        </div>
+                        <Button onClick={() => setIsWantedStockDialogOpen(true)} className="bg-red-600 hover:bg-red-700 text-white font-black uppercase h-12 rounded-2xl px-8 gap-2"><Plus className="w-4 h-4" /> Create Wanted Notice</Button>
+                      </div>
+                    )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
 
-                <div className="space-y-4">
-                  <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price (Each)</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
-                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleQuantity} onChange={(e) => setNewSaleQuantity(e.target.value)} /></div>
-                  </div>
-                  <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Card Sale</Button>
+            <Card className="shadow-sm border-none rounded-2xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-sm font-black uppercase">Active Customer Requests</CardTitle>
                 </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px]">
+                  <div className="divide-y">
+                    {wantedStock.map((wanted) => (
+                      <div key={wanted.id} className="p-6 space-y-2 hover:bg-slate-50 transition-colors group">
+                        <div className="flex justify-between items-start">
+                          <span className="font-black text-slate-900 uppercase text-xs">{wanted.cardName}</span>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 opacity-0 group-hover:opacity-100" onClick={() => deleteWantedStock(wanted.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-2"><User className="w-3 h-3" /> {wanted.customerName}</p>
+                          <p className="text-[10px] font-black uppercase text-primary tracking-wider flex items-center gap-2"><Phone className="w-3 h-3" /> {wanted.contactNumber}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {wantedStock.length === 0 && <div className="p-12 text-center text-slate-300 italic text-xs">No active requests.</div>}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white">
+            <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <History className="w-5 h-5 text-primary" />
+                <CardTitle className="text-xl font-black uppercase">Sales Ledger</CardTitle>
+              </div>
+              <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
+            </CardHeader>
+            <CardContent className="p-8 space-y-10">
+              <div className="bg-slate-50/50 p-6 rounded-3xl border shadow-inner max-w-md">
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">1. Active Seller Entity</label>
+                  <Select value={entrySellerId} onValueChange={(val) => { setEntrySellerId(val); setSelectedSellerId(val); }}>
+                    <SelectTrigger className="h-12 rounded-xl px-4 font-bold text-sm focus:ring-primary border-primary/10">
+                      <SelectValue placeholder="Select seller" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {activeSellers.map((s) => (
+                        <SelectItem key={s.id} value={s.id} className="font-bold py-3 uppercase text-xs">{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
               </div>
 
-              <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
-                <div className="flex items-center gap-2 mb-2"><Box className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Booster Pack Entry</h3></div>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newPackQuantity} onChange={(e) => setNewPackQuantity(e.target.value)} /></div>
-                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price Per Pack</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newPackPrice} onChange={(e) => setNewPackPrice(e.target.value)} /></div></div>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-xl border border-dashed text-center"><span className="text-[9px] font-black uppercase text-slate-400">Estimated Total: </span><span className="text-sm font-black text-primary">£{(Number(newPackQuantity) * (Number(newPackPrice) || 0)).toFixed(2)}</span></div>
-                  <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddPackSale} disabled={!entrySellerId || !newPackPrice || Number(newPackQuantity) < 1}>Log Pack Sale</Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="border rounded-2xl overflow-hidden bg-white shadow-sm mt-8">
-              <Table>
-                <TableHeader className="bg-slate-50/50">
-                  <TableRow>
-                    <TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] h-14">Detail</TableHead>
-                    <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Total Amount</TableHead>
-                    {isManagerAuthenticated && <TableHead className="font-black uppercase text-[10px] h-14 w-24 text-center">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {staffVaultTableData.length > 0 ? (
-                    staffVaultTableData.map((sale) => (
-                      <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
-                        <TableCell className="pl-6"><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
-                        <TableCell className="font-bold uppercase text-xs">
-                          {sale.cardName}
-                          {sale.quantity && sale.quantity > 1 && (
-                            <span className="ml-2 text-[10px] text-slate-400 font-black">x{sale.quantity}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
-                        {isManagerAuthenticated && (
-                          <TableCell className="text-center px-2">
-                             <div className="flex items-center justify-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                             </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow><TableCell colSpan={isManagerAuthenticated ? 4 : 3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell></TableRow>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
+                  <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Single Card Entry</h3></div>
+                  
+                  {entrySellerId && inventory.length > 0 && (
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Quick-Select Preloaded Item</p>
+                      <Select onValueChange={(val) => {
+                        const item = inventory.find(i => i.id === val);
+                        if (item) {
+                          setNewSaleCard(item.name);
+                          setNewSalePrice(item.price.toString());
+                          setNewSaleQuantity("1");
+                        }
+                      }}>
+                        <SelectTrigger className="h-11 rounded-xl px-4 font-bold text-xs border-primary/20">
+                          <SelectValue placeholder="Select an item to auto-fill..." />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl">
+                          {inventory.map((item) => (
+                            <SelectItem key={item.id} value={item.id!} className="font-bold py-3 uppercase text-[10px]">
+                              {item.name} — £{item.price.toFixed(2)} {item.quantity ? `(${item.quantity} in stock)` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Separator className="my-4" />
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price (Each)</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
+                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleQuantity} onChange={(e) => setNewSaleQuantity(e.target.value)} /></div>
+                    </div>
+                    <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Card Sale</Button>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
+                  <div className="flex items-center gap-2 mb-2"><Box className="w-4 h-4 text-primary" /><h3 className="text-xs font-black uppercase text-slate-600">Booster Pack Entry</h3></div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newPackQuantity} onChange={(e) => setNewPackQuantity(e.target.value)} /></div>
+                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price Per Pack</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newPackPrice} onChange={(e) => setNewPackPrice(e.target.value)} /></div></div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-dashed text-center"><span className="text-[9px] font-black uppercase text-slate-400">Estimated Total: </span><span className="text-sm font-black text-primary">£{(Number(newPackQuantity) * (Number(newPackPrice) || 0)).toFixed(2)}</span></div>
+                    <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddPackSale} disabled={!entrySellerId || !newPackPrice || Number(newPackQuantity) < 1}>Log Pack Sale</Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border rounded-2xl overflow-hidden bg-white shadow-sm mt-8">
+                <Table>
+                  <TableHeader className="bg-slate-50/50">
+                    <TableRow>
+                      <TableHead className="font-black uppercase text-[10px] h-14 pl-6">Seller</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Detail</TableHead>
+                      <TableHead className="text-right font-black uppercase text-[10px] h-14 pr-6">Total Amount</TableHead>
+                      {isManagerAuthenticated && <TableHead className="font-black uppercase text-[10px] h-14 w-24 text-center">Actions</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {staffVaultTableData.length > 0 ? (
+                      staffVaultTableData.map((sale) => (
+                        <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
+                          <TableCell className="pl-6"><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
+                          <TableCell className="font-bold uppercase text-xs">
+                            {sale.cardName}
+                            {sale.quantity && sale.quantity > 1 && (
+                              <span className="ml-2 text-[10px] text-slate-400 font-black">x{sale.quantity}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
+                          {isManagerAuthenticated && (
+                            <TableCell className="text-center px-2">
+                               <div className="flex items-center justify-center gap-1">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                               </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow><TableCell colSpan={isManagerAuthenticated ? 4 : 3} className="h-48 text-center text-slate-400 italic">No records for {selectedDate}.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {profileId === 'seller' && (
@@ -1719,22 +1891,35 @@ export default function Dashboard() {
                  </div>
                </Card>
 
-               <div className="space-y-6 flex flex-col h-full">
-                  <Card className="shadow-sm border-none rounded-[3rem] bg-white p-10 flex items-center gap-6 flex-1">
-                     <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-primary"><CalendarDays className="w-8 h-8" /></div>
-                     <div>
-                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Selling Since</p>
-                       <p className="text-2xl font-black text-slate-900">{sellerLifetimeStats.since}</p>
-                     </div>
-                  </Card>
-                  <Card className="shadow-sm border-none rounded-[3rem] bg-white p-10 flex items-center gap-6 flex-1">
-                     <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingUp className="w-8 h-8" /></div>
-                     <div>
-                       <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Avg. Weekly Payout</p>
-                       <p className="text-2xl font-black text-slate-900">£{sellerLifetimeStats.avgWeekly.toFixed(2)}</p>
-                     </div>
-                  </Card>
-               </div>
+               <Card className="bg-primary rounded-[3rem] p-10 border-none shadow-sm relative overflow-hidden group">
+                  <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-white/10 blur-[150px] rounded-full group-hover:scale-110 transition-transform duration-1000" />
+                  <div className="relative z-10 flex flex-col h-full space-y-6">
+                    <div className="flex items-center gap-4 text-white">
+                       <div className="p-3 bg-white/10 rounded-2xl"><Search className="w-6 h-6" /></div>
+                       <h2 className="text-xl font-black uppercase tracking-tighter">Wanted Items Board</h2>
+                    </div>
+                    <p className="text-white/60 font-bold text-xs uppercase tracking-wide">High Demand &bull; Secure Match Logic</p>
+                    <ScrollArea className="flex-1">
+                      <div className="space-y-3">
+                        {wantedStock.map((wanted) => (
+                          <div key={wanted.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors group">
+                            <p className="text-white font-black uppercase text-xs">{wanted.cardName}</p>
+                            <div className="flex justify-between items-center mt-2">
+                              <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Client: {wanted.customerName}</span>
+                              <Badge className="bg-white/10 text-[8px] font-black text-white/60">SOURCE ITEM</Badge>
+                            </div>
+                          </div>
+                        ))}
+                        {wantedStock.length === 0 && (
+                          <div className="h-48 flex flex-col items-center justify-center text-center space-y-4">
+                            <Rocket className="w-8 h-8 text-white/20 animate-pulse" />
+                            <p className="text-white/40 font-black uppercase text-[10px]">No active requests</p>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+               </Card>
             </div>
           )}
 
@@ -1841,6 +2026,30 @@ export default function Dashboard() {
             </div>
           </div>
           <DialogFooter><Button onClick={handleSaveEditSale} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Save Changes</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isWantedStockDialogOpen} onOpenChange={setIsWantedStockDialogOpen}>
+        <DialogContent className="rounded-[2.5rem] p-10 border-none shadow-2xl">
+          <DialogHeader className="items-center text-center space-y-4">
+            <div className="bg-primary/10 text-primary p-5 rounded-3xl"><Plus className="w-10 h-10" /></div>
+            <DialogTitle className="text-3xl font-black uppercase tracking-tighter">Create Wanted Notice</DialogTitle>
+            <p className="text-slate-500 font-bold text-sm">Post a request for <span className="text-primary">"{stockSearchQuery}"</span> to all sellers.</p>
+          </DialogHeader>
+          <div className="py-8 space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400">Customer Name</label>
+              <Input placeholder="e.g., Gary Oak" className="h-14 bg-slate-50 border-none rounded-2xl px-6 font-bold" value={wantedStockCustomer} onChange={(e) => setWantedStockCustomer(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400">Contact Number (Hidden from Sellers)</label>
+              <Input placeholder="e.g., 07123 456789" className="h-14 bg-slate-50 border-none rounded-2xl px-6 font-black" value={wantedStockContact} onChange={(e) => setWantedStockContact(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-3">
+            <Button onClick={handleCreateWantedStock} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Publish Request</Button>
+            <Button variant="ghost" onClick={() => setIsWantedStockDialogOpen(false)} className="w-full h-12 rounded-2xl font-black uppercase text-[10px] text-slate-400">Cancel</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

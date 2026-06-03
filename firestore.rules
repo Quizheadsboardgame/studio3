@@ -43,6 +43,14 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    match /wanted-stock/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /stock-matches/{id} {
+      allow read, write: if isSignedIn();
+    }
+
     match /{path=**} {
       allow read, write: if false;
     }

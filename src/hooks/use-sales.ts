@@ -83,6 +83,23 @@ export type RaffleEntry = {
   date: string;
 };
 
+export type WantedStock = {
+  id?: string;
+  cardName: string;
+  customerName: string;
+  contactNumber: string;
+  date: string;
+};
+
+export type StockMatch = {
+  id?: string;
+  wantedStockId: string;
+  sellerId: string;
+  sellerName: string;
+  itemName: string;
+  date: any;
+};
+
 export function useSales(profileId: string, currentSellerId?: string | null) {
   const { user } = useUser();
   const db = useFirestore();
@@ -140,6 +157,16 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     return collection(db, "profiles", "staff", "sellers", currentSellerId, "inventory");
   }, [db, user, currentSellerId]);
 
+  const wantedStockRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "wanted-stock");
+  }, [db, user]);
+
+  const stockMatchesRef = useMemoFirebase(() => {
+    if (!db || !user) return null;
+    return collection(db, "stock-matches");
+  }, [db, user]);
+
   const { data: sellersData, isLoading: sellersLoading } = useCollection<Seller>(sellersRef);
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
@@ -149,6 +176,8 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
   const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
   const { data: raffleEntriesData } = useCollection<RaffleEntry>(raffleEntriesRef);
   const { data: inventoryData } = useCollection<InventoryItem>(inventoryRef);
+  const { data: wantedStockData } = useCollection<WantedStock>(wantedStockRef);
+  const { data: stockMatchesData } = useCollection<StockMatch>(stockMatchesRef);
 
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
@@ -316,12 +345,52 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
       price,
       quantity
     }, { merge: true });
-  }, [inventoryRef]);
+
+    // Check for wanted stock matches
+    if (wantedStockData && stockMatchesRef) {
+      wantedStockData.forEach(wanted => {
+        if (name.toLowerCase().includes(wanted.cardName.toLowerCase()) || wanted.cardName.toLowerCase().includes(name.toLowerCase())) {
+          const matchRef = doc(stockMatchesRef);
+          const seller = sellers.find(s => s.id === currentSellerId);
+          setDocumentNonBlocking(matchRef, {
+            id: matchRef.id,
+            wantedStockId: wanted.id,
+            sellerId: currentSellerId,
+            sellerName: seller?.name || "Unknown Seller",
+            itemName: name,
+            date: new Date().toISOString()
+          }, { merge: true });
+        }
+      });
+    }
+  }, [inventoryRef, wantedStockData, stockMatchesRef, currentSellerId, sellers]);
 
   const deleteInventoryItem = useCallback((itemId: string) => {
     if (!inventoryRef) return;
     deleteDocumentNonBlocking(doc(inventoryRef, itemId));
   }, [inventoryRef]);
+
+  const addWantedStock = useCallback((cardName: string, customerName: string, contactNumber: string, date: string) => {
+    if (!wantedStockRef) return;
+    const docRef = doc(wantedStockRef);
+    setDocumentNonBlocking(docRef, {
+      id: docRef.id,
+      cardName,
+      customerName,
+      contactNumber,
+      date
+    }, { merge: true });
+  }, [wantedStockRef]);
+
+  const deleteWantedStock = useCallback((id: string) => {
+    if (!wantedStockRef) return;
+    deleteDocumentNonBlocking(doc(wantedStockRef, id));
+  }, [wantedStockRef]);
+
+  const deleteStockMatch = useCallback((id: string) => {
+    if (!stockMatchesRef) return;
+    deleteDocumentNonBlocking(doc(stockMatchesRef, id));
+  }, [stockMatchesRef]);
 
   return {
     sellers,
@@ -332,6 +401,8 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     tradeIns: tradeInsData || [],
     raffleEntries: raffleEntriesData || [],
     inventory: inventoryData || [],
+    wantedStock: wantedStockData || [],
+    stockMatches: stockMatchesData || [],
     isLoaded,
     addSeller,
     updateSeller,
@@ -347,6 +418,9 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     addRaffleEntry,
     deleteRaffleEntry,
     addInventoryItem,
-    deleteInventoryItem
+    deleteInventoryItem,
+    addWantedStock,
+    deleteWantedStock,
+    deleteStockMatch
   };
 }
