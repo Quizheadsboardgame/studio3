@@ -2,91 +2,33 @@
 {
   "entities": {
     "Seller": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Seller",
       "type": "object",
       "description": "Represents an individual seller of collectible cards.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Seller entity."
-        },
-        "name": {
-          "type": "string",
-          "description": "The full name of the seller."
-        },
-        "defaultCommission": {
-          "type": "number",
-          "description": "The default commission percentage (%) the manager earns per sale from this seller."
-        },
-        "password": {
-          "type": "string",
-          "description": "A secure access key for the seller to view their personal performance."
-        },
-        "archived": {
-          "type": "boolean",
-          "description": "Whether the seller is currently archived (inactive) but still in the database."
-        }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "defaultCommission": { "type": "number" },
+        "password": { "type": "string" },
+        "archived": { "type": "boolean" }
       },
-      "required": [
-        "id",
-        "name"
-      ]
+      "required": ["id", "name"]
     },
     "Sale": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Sale",
       "type": "object",
       "description": "Records an individual transaction for a collectible card.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Sale entity."
-        },
-        "cardName": {
-          "type": "string",
-          "description": "The name of the collectible card sold."
-        },
-        "price": {
-          "type": "number",
-          "description": "The sale price of the card, in the local currency (e.g., GBP)."
-        },
-        "commission": {
-          "type": "number",
-          "description": "The commission amount (calculated from percentage) designated for the manager from this sale."
-        },
-        "saleDate": {
-          "type": "string",
-          "description": "The date when the sale was recorded, in YYYY-MM-DD format.",
-          "format": "date"
-        },
-        "sellerId": {
-          "type": "string",
-          "description": "Reference to the Seller who made this sale."
-        },
-        "payoutStatus": {
-          "type": "string",
-          "description": "Current status of the payout for this sale.",
-          "enum": ["pending", "paid"]
-        },
-        "paymentMethod": {
-          "type": "string",
-          "description": "The method used to pay the seller.",
-          "enum": ["cash", "transfer"]
-        },
-        "paidAt": {
-          "type": "string",
-          "description": "The timestamp when the payout was settled.",
-          "format": "date-time"
-        }
+        "id": { "type": "string" },
+        "cardName": { "type": "string" },
+        "price": { "type": "number" },
+        "commission": { "type": "number" },
+        "saleDate": { "type": "string", "format": "date" },
+        "sellerId": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "transfer"] },
+        "paidAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "id",
-        "cardName",
-        "price",
-        "saleDate",
-        "sellerId"
-      ]
+      "required": ["id", "cardName", "price", "saleDate", "sellerId"]
     },
     "InventoryItem": {
       "title": "Inventory Item",
@@ -157,67 +99,36 @@
     }
   },
   "auth": {
-    "providers": [
-      "anonymous"
-    ]
+    "providers": ["anonymous"]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/profiles/{profileId}/sellers/{sellerId}",
-        "definition": {
-          "entityName": "Seller",
-          "schema": {
-            "$ref": "#/backend/entities/Seller"
-          },
-          "description": "Shared seller profiles."
-        }
-      },
-      {
-        "path": "/profiles/{profileId}/sellers/{sellerId}/inventory/{itemId}",
-        "definition": {
-          "entityName": "InventoryItem",
-          "description": "Preloaded inventory for quick adding by staff."
-        }
-      },
-      {
-        "path": "/profiles/{profileId}/sales/{saleId}",
-        "definition": {
-          "entityName": "Sale",
-          "schema": {
-            "$ref": "#/backend/entities/Sale"
-          },
-          "description": "Shared sales transactions."
-        }
-      },
-      {
-        "path": "/shop-finance-totals/{date}",
-        "definition": {
-          "entityName": "ShopTotal",
-          "description": "Daily total shop intake records."
-        }
-      },
-      {
-        "path": "/shop-finance-expenses/{expenseId}",
-        "definition": {
-          "entityName": "Expense",
-          "description": "Daily shop expenses."
-        }
-      },
-      {
-        "path": "/trade-ins/{tradeId}",
-        "definition": {
-          "entityName": "TradeIn",
-          "description": "Trade-in and buyback records."
-        }
-      },
-      {
-        "path": "/raffle-entries/{entryId}",
-        "definition": {
-          "entityName": "RaffleEntry",
-          "description": "Individual raffle ticket entries."
-        }
-      }
-    ]
+    "/profiles/{profileId}/sellers/{sellerId}": {
+      "schema": { "$ref": "#/backend/entities/Seller" },
+      "description": "Seller profiles."
+    },
+    "/profiles/{profileId}/sellers/{sellerId}/inventory/{itemId}": {
+      "schema": { "$ref": "#/backend/entities/InventoryItem" },
+      "description": "Preloaded inventory for quick adding by staff."
+    },
+    "/profiles/{profileId}/sales/{saleId}": {
+      "schema": { "$ref": "#/backend/entities/Sale" },
+      "description": "Sales transactions."
+    },
+    "/shop-finance-totals/{date}": {
+      "schema": { "$ref": "#/backend/entities/ShopTotal" },
+      "description": "Daily total shop intake records."
+    },
+    "/shop-finance-expenses/{expenseId}": {
+      "schema": { "$ref": "#/backend/entities/Expense" },
+      "description": "Daily shop expenses."
+    },
+    "/trade-ins/{tradeId}": {
+      "schema": { "$ref": "#/backend/entities/TradeIn" },
+      "description": "Trade-in and buyback records."
+    },
+    "/raffle-entries/{entryId}": {
+      "schema": { "$ref": "#/backend/entities/RaffleEntry" },
+      "description": "Individual raffle ticket entries."
+    }
   }
 }

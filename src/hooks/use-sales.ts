@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -6,6 +7,7 @@ import {
   doc, 
   serverTimestamp 
 } from "firebase/firestore";
+import { format, addDays, parseISO, isBefore, startOfDay } from "date-fns";
 import { 
   useFirestore, 
   useUser, 
@@ -79,11 +81,28 @@ export type RaffleEntry = {
   date: string;
 };
 
+function calculateMaturityDate(saleDateStr: string) {
+  try {
+    const d = parseISO(saleDateStr);
+    const isWednesday = d.getDay() === 3;
+    if (isWednesday) {
+      return format(startOfDay(addDays(d, 16)), "yyyy-MM-dd");
+    }
+    const minMaturity = addDays(d, 13);
+    let maturity = minMaturity;
+    while (maturity.getDay() !== 5) {
+      maturity = addDays(maturity, 1);
+    }
+    return format(startOfDay(maturity), "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
+}
+
 export function useSales(profileId: string, currentSellerId?: string | null) {
   const { user } = useUser();
   const db = useFirestore();
 
-  // Normalize effective profile mapping
   const effectiveProfile = useMemo(() => {
     const p = profileId?.toLowerCase();
     if (['seller', 'finance', 'trade', 'raffle', 'benefits'].includes(p)) {
@@ -150,13 +169,8 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
   const isLoaded = !sellersLoading && !primarySalesLoading && (!staffSalesLoading || effectiveProfile !== 'manager') && !!user;
 
   const combinedSalesData = useMemo(() => {
-    const normalize = (s: Sale) => ({
-      ...s,
-      commission: (s.price || 0) < 0 ? 0 : (s.commission || 0)
-    });
-    
-    const primary = (primarySalesData || []).map(s => ({ ...normalize(s), profileOrigin: effectiveProfile }));
-    const staff = (staffSalesData || []).map(s => ({ ...normalize(s), profileOrigin: 'staff' }));
+    const primary = (primarySalesData || []).map(s => ({ ...s, profileOrigin: effectiveProfile }));
+    const staff = (staffSalesData || []).map(s => ({ ...s, profileOrigin: 'staff' }));
     
     const all = [...primary];
     staff.forEach(s => {

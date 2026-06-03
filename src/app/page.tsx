@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
-import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay, differenceInWeeks } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, startOfDay, differenceInWeeks } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -59,7 +59,6 @@ import {
   Dices,
   Timer,
   CalendarDays,
-  TrendingUp as TrendingIcon,
   Sparkles,
   Rocket,
   Globe,
@@ -147,6 +146,26 @@ function Pokeball({ isOpen, className }: { isOpen: boolean; className?: string }
   );
 }
 
+function calculateMaturityDate(saleDateStr: string) {
+  try {
+    const d = parseISO(saleDateStr);
+    // User logic: Wed = 16 days. Others = Friday at least 13 days away.
+    const isWednesday = d.getDay() === 3;
+    if (isWednesday) {
+      return format(startOfDay(addDays(d, 16)), "yyyy-MM-dd");
+    }
+    // Standard logic to find the next Friday that is at least 13 days away
+    const minMaturity = addDays(d, 13);
+    let maturity = minMaturity;
+    while (maturity.getDay() !== 5) {
+      maturity = addDays(maturity, 1);
+    }
+    return format(startOfDay(maturity), "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
+}
+
 function aggregateSales(salesList: Sale[]) {
   const packsMap: Record<string, Sale> = {};
   const cardsList: Sale[] = [];
@@ -171,17 +190,6 @@ function aggregateSales(salesList: Sale[]) {
   });
 
   return [...cardsList, ...Object.values(packsMap)].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-}
-
-function calculateMaturityDate(saleDateStr: string) {
-  try {
-    const d = parseISO(saleDateStr);
-    const isWednesday = d.getDay() === 3;
-    const maturityDate = startOfDay(addDays(d, isWednesday ? 16 : 13));
-    return format(maturityDate, "yyyy-MM-dd");
-  } catch {
-    return "";
-  }
 }
 
 export default function Dashboard() {
@@ -298,7 +306,6 @@ export default function Dashboard() {
   }, [activeSellers, entrySellerId]);
 
   useEffect(() => {
-    // When a seller is authenticated in the Seller Vault, pre-set the commission
     if (profileId === 'seller' && authenticatedSellerId) {
       const seller = sellers.find(s => s.id === authenticatedSellerId);
       if (seller) {
@@ -415,6 +422,7 @@ export default function Dashboard() {
       setIsCountdownMode(false);
       const runRevealSequence = async () => {
         setIsDrawing(true);
+        // Reveal 3rd, 2nd, 1st
         for (const idx of [2, 1, 0]) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           setRevealedWinners(prev => {
@@ -500,7 +508,8 @@ export default function Dashboard() {
       if (isSelectedDateFriday) {
         payoutDateStr = format(parseISO(selectedDate), "PPP");
       } else {
-        payoutDateStr = format(parseISO(calculateMaturityDate(selectedDate)), "PPP");
+        const maturityStr = calculateMaturityDate(selectedDate);
+        if (maturityStr) payoutDateStr = format(parseISO(maturityStr), "PPP");
       }
     }
 
@@ -561,7 +570,7 @@ export default function Dashboard() {
     if (profileId !== 'manager' || !isMounted) return null;
     const today = startOfDay(new Date());
     const thisFridayDate = startOfDay(nextFriday(today));
-    const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
+    const nextFridayDate = startOfDay(addDays(thisFridayDate, 7));
 
     const forecast = {
       thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[] }> },
@@ -571,6 +580,7 @@ export default function Dashboard() {
     combinedSalesData.forEach(sale => {
       try {
         const maturityDateStr = calculateMaturityDate(sale.saleDate);
+        if (!maturityDateStr) return;
         const maturityDate = startOfDay(parseISO(maturityDateStr));
         const net = sale.price - (sale.commission || 0);
         const seller = sellers.find(s => s.id === sale.sellerId);
@@ -776,7 +786,7 @@ export default function Dashboard() {
           sale.cardName, 
           `£${sale.price.toFixed(2)}`, 
           `£${(sale.price - (sale.commission || 0)).toFixed(2)}`,
-          `£${(sale as any).runningTotal.toFixed(2)}`
+          `£${((sale as any).runningTotal || 0).toFixed(2)}`
         ]),
         theme: 'grid',
         headStyles: { fillColor: [0, 0, 0] },
@@ -1445,7 +1455,7 @@ export default function Dashboard() {
               </div>
               <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Log Expense</Button>
               <Separator />
-              <scroll-area className="h-[150px]">
+              <ScrollArea className="h-[150px]">
                 <div className="space-y-2">
                   {currentDayExpenses.map((exp) => (
                     <div key={exp.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -1457,7 +1467,7 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              </scroll-area>
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
@@ -1691,7 +1701,7 @@ export default function Dashboard() {
                      </div>
                   </Card>
                   <Card className="shadow-sm border-none rounded-[3rem] bg-white p-10 flex items-center gap-6 flex-1">
-                     <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingIcon className="w-8 h-8" /></div>
+                     <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingUp className="w-8 h-8" /></div>
                      <div>
                        <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Avg. Weekly Payout</p>
                        <p className="text-2xl font-black text-slate-900">£{sellerLifetimeStats.avgWeekly.toFixed(2)}</p>
@@ -1737,7 +1747,7 @@ export default function Dashboard() {
                            </TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                            <TableCell className="font-black text-slate-900">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
-                           <TableCell className="text-right pr-8 font-black text-primary">£{(sale as any).runningTotal.toFixed(2)}</TableCell>
+                           <TableCell className="text-right pr-8 font-black text-primary">£{((sale as any).runningTotal || 0).toFixed(2)}</TableCell>
                          </TableRow>
                        ))}
                        {sellerDailySalesAggregated.length === 0 && (
