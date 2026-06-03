@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
-import { format, addDays, parseISO, nextFriday, isBefore, isAfter, startOfDay, differenceInWeeks } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, startOfDay, differenceInWeeks, startOfWeek } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -48,7 +48,8 @@ import {
   UserPlus,
   Bell,
   Phone,
-  MessageSquare
+  MessageSquare,
+  BarChart3
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -540,25 +541,18 @@ export default function Dashboard() {
     };
   }, [authenticatedSellerId, combinedSalesData]);
 
-  const inventoryEstimates = useMemo(() => {
-    const estimates: Record<string, { avg: number; count: number; estimatedNet: number }> = {};
-    const seller = sellers.find(s => s.id === authenticatedSellerId);
-    const commRate = seller?.defaultCommission || 10;
-
-    inventory.forEach(item => {
-      const matches = combinedSalesData.filter(s => s.cardName.toLowerCase().includes(item.name.toLowerCase()));
-      if (matches.length > 0) {
-        const avg = matches.reduce((acc, s) => acc + (s.price / (s.quantity || 1)), 0) / matches.length;
-        const netAvg = avg * (1 - (commRate / 100));
-        estimates[item.id!] = {
-          avg,
-          count: matches.length,
-          estimatedNet: netAvg * (item.quantity || 1)
-        };
-      }
-    });
-    return estimates;
-  }, [inventory, combinedSalesData, authenticatedSellerId, sellers]);
+  const inventoryTotals = useMemo(() => {
+    const commRate = parseFloat(calcCommission) || 10;
+    const factor = (100 - commRate) / 100;
+    
+    return inventory.reduce((acc, item) => {
+      const gross = item.price * (item.quantity || 1);
+      const net = gross * factor;
+      acc.totalGross += gross;
+      acc.totalNet += net;
+      return acc;
+    }, { totalGross: 0, totalNet: 0 });
+  }, [inventory, calcCommission]);
 
   const filteredSalesData = useMemo(() => {
     if (!searchQuery) return [];
@@ -840,15 +834,30 @@ export default function Dashboard() {
   };
 
   const incomeGoalCalc = useMemo(() => {
-    const income = parseFloat(targetWeeklyPayout) || 0;
+    const target = parseFloat(targetWeeklyPayout) || 0;
     const comm = parseFloat(calcCommission) || 10;
     const factor = (100 - comm) / 100;
-    const needed = factor > 0 ? income / factor : 0;
+    const grossNeeded = factor > 0 ? target / factor : 0;
+    
+    // Calculate current week progress (from Monday of current week)
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const weekSales = combinedSalesData.filter(s => {
+      const saleDate = parseISO(s.saleDate);
+      return s.sellerId === authenticatedSellerId && !isBefore(saleDate, weekStart);
+    });
+    
+    const currentWeekNet = weekSales.reduce((acc, s) => acc + (s.price - (s.commission || 0)), 0);
+    const progressPercent = target > 0 ? (currentWeekNet / target) * 100 : 0;
+    const remainingToGoal = Math.max(0, target - currentWeekNet);
+
     return {
-      grossSalesNeeded: needed,
-      commissionPaid: needed - income
+      grossSalesNeeded: grossNeeded,
+      commissionPaid: grossNeeded - target,
+      currentWeekNet,
+      progressPercent,
+      remainingToGoal
     };
-  }, [targetWeeklyPayout, calcCommission]);
+  }, [targetWeeklyPayout, calcCommission, combinedSalesData, authenticatedSellerId]);
 
   const stockSearchResults = useMemo(() => {
     if (!stockSearchQuery) return [];
@@ -1805,14 +1814,13 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                <Card className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group">
                   <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse transition-all duration-1000" />
-                  <div className="relative z-10 space-y-8">
+                  <div className="relative z-10 space-y-6">
                      <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/10 rounded-2xl"><Target className="w-6 h-6 text-primary" /></div>
                         <h2 className="text-2xl font-black uppercase tracking-tighter">Earnings Goal Calculator</h2>
                      </div>
-                     <p className="text-white/60 font-medium text-xs">Set your target weekly payout and see exactly what gross sales volume you need to hit at your <span className="text-primary font-black">{calcCommission}%</span> commission tier.</p>
                      
-                     <div className="space-y-6">
+                     <div className="space-y-4">
                         <div className="space-y-2">
                            <label className="text-[10px] font-black uppercase text-white/40">Target Weekly Payout (£)</label>
                            <Input 
@@ -1823,32 +1831,58 @@ export default function Dashboard() {
                            />
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center space-y-2">
-                           <p className="text-[10px] font-black uppercase text-primary tracking-widest">Weekly Sales Required</p>
-                           <p className="text-5xl font-black tracking-tighter">£{incomeGoalCalc.grossSalesNeeded.toFixed(2)}</p>
-                           <p className="text-[9px] font-bold text-white/30 uppercase pt-2">Est. NC Commission: £{incomeGoalCalc.commissionPaid.toFixed(2)}</p>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                              <p className="text-[8px] font-black uppercase text-white/40 mb-1">Required Gross</p>
+                              <p className="text-lg font-black">£{incomeGoalCalc.grossSalesNeeded.toFixed(2)}</p>
+                           </div>
+                           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                              <p className="text-[8px] font-black uppercase text-white/40 mb-1">Commission Paid</p>
+                              <p className="text-lg font-black text-red-400">£{incomeGoalCalc.commissionPaid.toFixed(2)}</p>
+                           </div>
+                        </div>
+
+                        <Separator className="bg-white/10" />
+
+                        <div className="space-y-3">
+                           <div className="flex justify-between items-end">
+                              <div>
+                                 <p className="text-[10px] font-black uppercase text-primary tracking-widest">Personal Progress</p>
+                                 <p className="text-3xl font-black">£{incomeGoalCalc.currentWeekNet.toFixed(2)}</p>
+                              </div>
+                              <Badge className="bg-primary/20 text-primary font-black border-none h-6">{Math.round(incomeGoalCalc.progressPercent)}%</Badge>
+                           </div>
+                           <div className="h-3 bg-white/5 rounded-full overflow-hidden">
+                              <div 
+                                 className="h-full bg-primary transition-all duration-1000" 
+                                 style={{ width: `${Math.min(100, incomeGoalCalc.progressPercent)}%` }} 
+                              />
+                           </div>
+                           <p className="text-[9px] font-bold text-white/30 uppercase text-center">£{incomeGoalCalc.remainingToGoal.toFixed(2)} more to reach your £{targetWeeklyPayout} goal</p>
                         </div>
                      </div>
                   </div>
                </Card>
 
-               <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-8">
+               <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-6">
                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                        <div className="p-3 bg-blue-50 rounded-2xl"><ListPlus className="w-6 h-6 text-blue-500" /></div>
                        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Preload Inventory</h2>
                     </div>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="w-4 h-4 text-slate-300 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="p-4 max-w-xs rounded-xl bg-slate-900 text-white border-none">
-                          <p className="text-xs font-bold leading-relaxed">Inventory intelligence predicts your net payout by averaging the historical selling price of these items across the entire Newton's ledger.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                  </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 border rounded-2xl p-4">
+                       <p className="text-[8px] font-black uppercase text-slate-400 mb-1">Total Stock Value</p>
+                       <p className="text-xl font-black text-slate-900">£{inventoryTotals.totalGross.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                       <p className="text-[8px] font-black uppercase text-emerald-600 mb-1">Potential Earnings</p>
+                       <p className="text-xl font-black text-emerald-700">£{inventoryTotals.totalNet.toFixed(2)}</p>
+                    </div>
+                 </div>
+
                  <div className="space-y-4">
                     <div className="space-y-3">
                        <Input placeholder="Card Name..." value={newInventoryName} onChange={(e) => setNewInventoryName(e.target.value)} className="h-11 rounded-xl font-bold" />
@@ -1862,25 +1896,16 @@ export default function Dashboard() {
                     <ScrollArea className="h-[180px]">
                        <div className="space-y-2">
                           {inventory.map((item) => {
-                            const est = inventoryEstimates[item.id!];
                             return (
-                              <div key={item.id} className="p-3 rounded-xl bg-slate-50 border group space-y-2">
-                                <div className="flex justify-between items-center">
-                                   <span className="font-bold text-[10px] uppercase truncate max-w-[120px]">{item.name} {item.quantity ? `(x${item.quantity})` : ''}</span>
-                                   <div className="flex items-center gap-3">
-                                      <span className="font-black text-slate-900 text-xs">£{item.price.toFixed(2)}</span>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                                   </div>
+                              <div key={item.id} className="p-3 rounded-xl bg-slate-50 border group flex justify-between items-center transition-all hover:bg-slate-100">
+                                <div className="flex flex-col">
+                                   <span className="font-bold text-[10px] uppercase truncate max-w-[150px]">{item.name}</span>
+                                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">QTY: {item.quantity || 1} &bull; £{item.price.toFixed(2)} EA</span>
                                 </div>
-                                {est && (
-                                  <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-left-2">
-                                    <div className="flex items-center gap-2">
-                                      <Sparkles className="w-3 h-3 text-amber-500" />
-                                      <span className="text-[8px] font-black uppercase text-slate-400">Est. Net Payout</span>
-                                    </div>
-                                    <span className="text-[10px] font-black text-amber-600">£{est.estimatedNet.toFixed(2)}</span>
-                                  </div>
-                                )}
+                                <div className="flex items-center gap-2">
+                                   <span className="font-black text-slate-900 text-xs">£{(item.price * (item.quantity || 1)).toFixed(2)}</span>
+                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                </div>
                               </div>
                             );
                           })}
