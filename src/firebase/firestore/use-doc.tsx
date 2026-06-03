@@ -45,8 +45,8 @@ export function useDoc<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // Basic validation to prevent internal SDK errors if the ref is not fully formed
-    if (!memoizedDocRef || !memoizedDocRef.firestore) {
+    // Robust check for fully initialized Firestore reference
+    if (!memoizedDocRef || typeof memoizedDocRef !== 'object' || !memoizedDocRef.firestore) {
       setData(null);
       setIsLoading(false);
       setError(null);
@@ -56,9 +56,13 @@ export function useDoc<T = any>(
     setIsLoading(true);
     setError(null);
 
+    let isSubscribed = true;
+
     const unsubscribe = onSnapshot(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
+        if (!isSubscribed) return;
+
         if (snapshot.exists()) {
           setData({ ...(snapshot.data() as T), id: snapshot.id });
         } else {
@@ -68,6 +72,8 @@ export function useDoc<T = any>(
         setIsLoading(false);
       },
       (err: FirestoreError) => {
+        if (!isSubscribed) return;
+
         const contextualError = new FirestorePermissionError({
           operation: 'get',
           path: memoizedDocRef.path,
@@ -82,7 +88,10 @@ export function useDoc<T = any>(
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+    };
   }, [memoizedDocRef]);
 
   return { data, isLoading, error };

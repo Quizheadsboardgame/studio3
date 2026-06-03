@@ -32,7 +32,7 @@ export interface UseCollectionResult<T> {
  * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery.
  * 
  * @template T Optional type for document data. Defaults to any.
- * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} targetRefOrQuery -
+ * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} memoizedTargetRefOrQuery -
  * The Firestore CollectionReference or Query. Waits if null/undefined.
  * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
  */
@@ -47,8 +47,8 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // Basic validation to prevent internal SDK errors if the ref is not fully formed
-    if (!memoizedTargetRefOrQuery || !memoizedTargetRefOrQuery.firestore) {
+    // Robust check for fully initialized Firestore reference
+    if (!memoizedTargetRefOrQuery || typeof memoizedTargetRefOrQuery !== 'object' || !memoizedTargetRefOrQuery.firestore) {
       setData(null);
       setIsLoading(false);
       setError(null);
@@ -58,18 +58,25 @@ export function useCollection<T = any>(
     setIsLoading(true);
     setError(null);
 
+    let isSubscribed = true;
+
     const unsubscribe = onSnapshot(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
+        if (!isSubscribed) return;
+        
         const results: ResultItemType[] = [];
-        for (const doc of snapshot.docs) {
+        snapshot.forEach((doc) => {
           results.push({ ...(doc.data() as T), id: doc.id });
-        }
+        });
+        
         setData(results);
         setError(null);
         setIsLoading(false);
       },
       (err: FirestoreError) => {
+        if (!isSubscribed) return;
+
         // Fallback path extraction without using private SDK properties
         let path = 'unknown';
         try {
@@ -94,7 +101,10 @@ export function useCollection<T = any>(
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      isSubscribed = false;
+      unsubscribe();
+    };
   }, [memoizedTargetRefOrQuery]);
 
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
