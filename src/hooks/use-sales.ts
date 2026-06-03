@@ -175,7 +175,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
   const { data: expensesData } = useCollection<Expense>(expensesRef);
   const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
   const { data: raffleEntriesData } = useCollection<RaffleEntry>(raffleEntriesRef);
-  const { data: inventoryData } = useCollection<InventoryItem>(inventoryRef);
+  const { data: inventoryData, isLoading: inventoryLoading } = useCollection<InventoryItem>(inventoryRef);
   const { data: wantedStockData } = useCollection<WantedStock>(wantedStockRef);
   const { data: stockMatchesData } = useCollection<StockMatch>(stockMatchesRef);
 
@@ -201,6 +201,10 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     });
     return all.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [sellersData, staffSellersData, effectiveProfile]);
+
+  const inventory = useMemo(() => {
+    return (inventoryData || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [inventoryData]);
 
   const salesByDate = useMemo(() => {
     const result: Record<string, Record<string, Sale[]>> = {};
@@ -400,7 +404,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     expenses: expensesData || [],
     tradeIns: tradeInsData || [],
     raffleEntries: raffleEntriesData || [],
-    inventory: inventoryData || [],
+    inventory,
     wantedStock: wantedStockData || [],
     stockMatches: stockMatchesData || [],
     isLoaded,
