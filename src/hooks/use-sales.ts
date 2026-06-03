@@ -106,7 +106,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
 
   const effectiveProfile = useMemo(() => {
     const p = profileId?.toLowerCase();
-    if (['seller', 'finance', 'trade', 'raffle', 'benefits'].includes(p)) {
+    if (['seller', 'finance', 'trade', 'raffle', 'benefits', 'inventory'].includes(p)) {
       return 'staff';
     }
     return p || 'staff';

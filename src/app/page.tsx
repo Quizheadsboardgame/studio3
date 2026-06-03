@@ -100,7 +100,7 @@ import { cn } from "@/lib/utils";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade' | 'raffle' | 'benefits';
+type ProfileType = 'manager' | 'staff' | 'inventory' | 'seller' | 'finance' | 'trade' | 'raffle' | 'benefits';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -109,6 +109,7 @@ const LEGAL_STATEMENT = "Newtons collectables is a trading names for journey tog
 const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   manager: { primary: "222 47% 11%", ring: "222 47% 11%" }, 
   staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   
+  inventory: { primary: "142 71% 45%", ring: "142 71% 45%" },
   seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  
   finance: { primary: "38 92% 50%", ring: "38 92% 50%" },
   trade: { primary: "262 83% 58%", ring: "262 83% 58%" },
@@ -852,14 +853,6 @@ export default function Dashboard() {
   const stockSearchResults = useMemo(() => {
     if (!stockSearchQuery) return [];
     const query = stockSearchQuery.toLowerCase();
-    
-    // Search in all sellers' inventory
-    // Note: In a real app with many sellers, we might need a separate index, 
-    // but for this MVP we aggregate what we have access to or defined in schema.
-    // For now, search within current active sellers' inventory we can access
-    const results: any[] = [];
-    // (In this specific hook structure, we only have currentSeller inventory loaded)
-    // For a global search, we'd need to fetch all inventory.
     return inventory.filter(i => i.name.toLowerCase().includes(query));
   }, [stockSearchQuery, inventory]);
 
@@ -907,6 +900,7 @@ export default function Dashboard() {
                 <span className="font-black uppercase tracking-widest text-xs flex items-center gap-2">
                   {profileId === 'manager' && <ShieldCheck className="w-4 h-4 text-primary" />}
                   {profileId === 'staff' && <UserCircle className="w-4 h-4 text-primary" />}
+                  {profileId === 'inventory' && <Search className="w-4 h-4 text-primary" />}
                   {profileId === 'seller' && <User className="w-4 h-4 text-primary" />}
                   {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
                   {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
@@ -919,6 +913,7 @@ export default function Dashboard() {
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 border-primary/10 shadow-xl">
               <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MANAGER</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('inventory')} className="gap-3 py-3 font-bold"><Search className="w-5 h-5 text-emerald-600" /> STOCK SEARCH</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('trade')} className="gap-3 py-3 font-bold"><Zap className="w-5 h-5 text-purple-600" /> TRADE-IN</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('raffle')} className="gap-3 py-3 font-bold"><Ticket className="w-5 h-5 text-red-600" /> RAFFLE</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('benefits')} className="gap-3 py-3 font-bold"><Sparkles className="w-5 h-5 text-cyan-600" /> SELLER BENEFITS</DropdownMenuItem>
@@ -996,6 +991,87 @@ export default function Dashboard() {
                </div>
              </Card>
            </div>
+        </div>
+      )}
+
+      {profileId === 'inventory' && (
+        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="lg:col-span-2 shadow-sm border-none rounded-2xl overflow-hidden bg-white">
+              <CardHeader className="border-b bg-slate-50/20 px-8 py-6">
+                <div className="flex items-center gap-3">
+                  <Target className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-xl font-black uppercase">Inventory Search & Wanted List</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-8 space-y-6">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <Input 
+                    placeholder="Search master inventory..." 
+                    className="pl-12 h-14 rounded-2xl font-bold border-slate-100 focus-visible:ring-primary shadow-sm"
+                    value={stockSearchQuery}
+                    onChange={(e) => setStockSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                {stockSearchQuery && (
+                  <div className="space-y-4">
+                    {stockSearchResults.length > 0 ? (
+                      <div className="bg-slate-50 rounded-2xl border p-2">
+                        {stockSearchResults.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-4 hover:bg-white rounded-xl transition-all">
+                            <span className="font-black uppercase text-xs text-slate-700">{item.name}</span>
+                            <div className="flex items-center gap-4">
+                              <Badge className="bg-primary/10 text-primary border-primary/20 font-black">£{item.price.toFixed(2)}</Badge>
+                              <span className="text-[10px] font-black uppercase text-slate-400">Qty: {item.quantity}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-100 rounded-[2.5rem] p-8 text-center space-y-6">
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto"><Box className="w-8 h-8" /></div>
+                        <div className="space-y-2">
+                          <h3 className="text-xl font-black uppercase tracking-tight text-red-900">Item Not in Stock</h3>
+                          <p className="text-red-700/60 font-bold text-sm">Would you like to create a Wanted Stock Notice for "{stockSearchQuery}"?</p>
+                        </div>
+                        <Button onClick={() => setIsWantedStockDialogOpen(true)} className="bg-red-600 hover:bg-red-700 text-white font-black uppercase h-12 rounded-2xl px-8 gap-2"><Plus className="w-4 h-4" /> Create Wanted Notice</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-none rounded-2xl bg-white overflow-hidden">
+              <CardHeader className="p-8 border-b bg-slate-50/20">
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-sm font-black uppercase">Active Customer Requests</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px]">
+                  <div className="divide-y">
+                    {wantedStock.map((wanted) => (
+                      <div key={wanted.id} className="p-6 space-y-2 hover:bg-slate-50 transition-colors group">
+                        <div className="flex justify-between items-start">
+                          <span className="font-black text-slate-900 uppercase text-xs">{wanted.cardName}</span>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 opacity-0 group-hover:opacity-100" onClick={() => deleteWantedStock(wanted.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-2"><User className="w-3 h-3" /> {wanted.customerName}</p>
+                          <p className="text-[10px] font-black uppercase text-primary tracking-wider flex items-center gap-2"><Phone className="w-3 h-3" /> {wanted.contactNumber}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {wantedStock.length === 0 && <div className="p-12 text-center text-slate-300 italic text-xs">No active requests.</div>}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -1558,83 +1634,6 @@ export default function Dashboard() {
 
       {profileId === 'staff' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 shadow-sm border-none rounded-2xl overflow-hidden bg-white">
-              <CardHeader className="border-b bg-slate-50/20 px-8 py-6">
-                <div className="flex items-center gap-3">
-                  <Target className="w-5 h-5 text-primary" />
-                  <CardTitle className="text-xl font-black uppercase">Inventory Search & Wanted List</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-8 space-y-6">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <Input 
-                    placeholder="Search master inventory..." 
-                    className="pl-12 h-14 rounded-2xl font-bold border-slate-100 focus-visible:ring-primary shadow-sm"
-                    value={stockSearchQuery}
-                    onChange={(e) => setStockSearchQuery(e.target.value)}
-                  />
-                </div>
-
-                {stockSearchQuery && (
-                  <div className="space-y-4">
-                    {stockSearchResults.length > 0 ? (
-                      <div className="bg-slate-50 rounded-2xl border p-2">
-                        {stockSearchResults.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-4 hover:bg-white rounded-xl transition-all">
-                            <span className="font-black uppercase text-xs text-slate-700">{item.name}</span>
-                            <div className="flex items-center gap-4">
-                              <Badge className="bg-primary/10 text-primary border-primary/20 font-black">£{item.price.toFixed(2)}</Badge>
-                              <span className="text-[10px] font-black uppercase text-slate-400">Qty: {item.quantity}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="bg-red-50 border border-red-100 rounded-[2.5rem] p-8 text-center space-y-6">
-                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto"><Box className="w-8 h-8" /></div>
-                        <div className="space-y-2">
-                          <h3 className="text-xl font-black uppercase tracking-tight text-red-900">Item Not in Stock</h3>
-                          <p className="text-red-700/60 font-bold text-sm">Would you like to create a Wanted Stock Notice for "{stockSearchQuery}"?</p>
-                        </div>
-                        <Button onClick={() => setIsWantedStockDialogOpen(true)} className="bg-red-600 hover:bg-red-700 text-white font-black uppercase h-12 rounded-2xl px-8 gap-2"><Plus className="w-4 h-4" /> Create Wanted Notice</Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm border-none rounded-2xl bg-white overflow-hidden">
-              <CardHeader className="p-8 border-b bg-slate-50/20">
-                <div className="flex items-center gap-3">
-                  <MessageSquare className="w-5 h-5 text-primary" />
-                  <CardTitle className="text-sm font-black uppercase">Active Customer Requests</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[400px]">
-                  <div className="divide-y">
-                    {wantedStock.map((wanted) => (
-                      <div key={wanted.id} className="p-6 space-y-2 hover:bg-slate-50 transition-colors group">
-                        <div className="flex justify-between items-start">
-                          <span className="font-black text-slate-900 uppercase text-xs">{wanted.cardName}</span>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 opacity-0 group-hover:opacity-100" onClick={() => deleteWantedStock(wanted.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-2"><User className="w-3 h-3" /> {wanted.customerName}</p>
-                          <p className="text-[10px] font-black uppercase text-primary tracking-wider flex items-center gap-2"><Phone className="w-3 h-3" /> {wanted.contactNumber}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {wantedStock.length === 0 && <div className="p-12 text-center text-slate-300 italic text-xs">No active requests.</div>}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-
           <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white">
             <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
               <div className="flex items-center gap-3">
