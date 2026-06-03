@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -308,6 +307,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (activeSellers.length > 0 && !entrySellerId) {
       setEntrySellerId(activeSellers[0].id);
+      setSelectedSellerId(activeSellers[0].id);
     }
   }, [activeSellers, entrySellerId]);
 
@@ -399,8 +399,6 @@ export default function Dashboard() {
       const idx = Math.floor(Math.random() * tempPool.length);
       picked.push(tempPool[idx]);
       const nameToRemove = tempPool[idx];
-      // Keep other people but remove all tickets of this winner for next slot to avoid duplicates? 
-      // User didn't specify, standard raffle usually allows one person to win multiple times if they have many tickets.
     }
 
     setWinners(picked);
@@ -552,7 +550,6 @@ export default function Dashboard() {
     };
   }, [authenticatedSellerId, combinedSalesData]);
 
-  // Inventory Intelligence - Estimated Earnings
   const inventoryEstimates = useMemo(() => {
     const estimates: Record<string, { avg: number; count: number; estimatedNet: number }> = {};
     const seller = sellers.find(s => s.id === authenticatedSellerId);
@@ -1530,24 +1527,26 @@ export default function Dashboard() {
                 
                 {entrySellerId && inventory.length > 0 && (
                   <div className="space-y-3">
-                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Quick-Add Seller Inventory</p>
-                    <div className="flex flex-wrap gap-2">
-                      {inventory.map((item) => (
-                        <Button 
-                          key={item.id} 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-9 px-4 rounded-xl font-bold uppercase text-[9px] gap-2 border-primary/20 hover:bg-primary hover:text-white transition-all"
-                          onClick={() => {
-                            setNewSaleCard(item.name);
-                            setNewSalePrice(item.price.toString());
-                            setNewSaleQuantity("1");
-                          }}
-                        >
-                          <Plus className="w-3 h-3" /> {item.name} (£{item.price}) {item.quantity ? `[Stk: ${item.quantity}]` : ''}
-                        </Button>
-                      ))}
-                    </div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Quick-Select Preloaded Item</p>
+                    <Select onValueChange={(val) => {
+                      const item = inventory.find(i => i.id === val);
+                      if (item) {
+                        setNewSaleCard(item.name);
+                        setNewSalePrice(item.price.toString());
+                        setNewSaleQuantity("1");
+                      }
+                    }}>
+                      <SelectTrigger className="h-11 rounded-xl px-4 font-bold text-xs border-primary/20">
+                        <SelectValue placeholder="Select an item to auto-fill..." />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        {inventory.map((item) => (
+                          <SelectItem key={item.id} value={item.id!} className="font-bold py-3 uppercase text-[10px]">
+                            {item.name} — £{item.price.toFixed(2)} {item.quantity ? `(${item.quantity} in stock)` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Separator className="my-4" />
                   </div>
                 )}
