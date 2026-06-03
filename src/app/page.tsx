@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -160,6 +161,21 @@ function aggregateSales(salesList: Sale[]) {
   });
 
   return [...cardsList, ...Object.values(packsMap)].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+}
+
+/**
+ * Calculates the maturity (payout) date for a sale.
+ * Rule: 16 days if Wednesday, 13 days otherwise.
+ */
+function calculateMaturityDate(saleDateStr: string) {
+  try {
+    const d = parseISO(saleDateStr);
+    const isWednesday = d.getDay() === 3;
+    const maturityDate = startOfDay(addDays(d, isWednesday ? 16 : 13));
+    return format(maturityDate, "yyyy-MM-dd");
+  } catch {
+    return "";
+  }
 }
 
 export default function Dashboard() {
@@ -425,10 +441,34 @@ export default function Dashboard() {
     return isManagerAuthenticated ? allDailySalesRaw : allDailySalesAggregated;
   }, [isManagerAuthenticated, allDailySalesRaw, allDailySalesAggregated]);
 
+  /**
+   * SELLER VAULT LOGIC:
+   * If selectedDate is a Friday, pull all sales whose calculated maturity date matches this date.
+   * Otherwise, pull sales logged on this specific day.
+   */
+  const isSelectedDateFriday = useMemo(() => {
+    if (!isMounted || !selectedDate) return false;
+    try {
+      return parseISO(selectedDate).getDay() === 5;
+    } catch {
+      return false;
+    }
+  }, [selectedDate, isMounted]);
+
   const sellerDailySalesRaw = useMemo(() => {
-    if (!profileId || !authenticatedSellerId || !dailySalesData) return [];
-    return dailySalesData[authenticatedSellerId] || [];
-  }, [profileId, authenticatedSellerId, dailySalesData]);
+    if (!profileId || !authenticatedSellerId || !selectedDate) return [];
+    
+    if (isSelectedDateFriday) {
+      // Pull all sales for this seller across time that MATURE on this Friday
+      return combinedSalesData.filter(sale => {
+        if (sale.sellerId !== authenticatedSellerId) return false;
+        return calculateMaturityDate(sale.saleDate) === selectedDate;
+      });
+    } else {
+      // Pull sales actually LOGGED on this date
+      return dailySalesData[authenticatedSellerId] || [];
+    }
+  }, [profileId, authenticatedSellerId, dailySalesData, selectedDate, combinedSalesData, isSelectedDateFriday]);
 
   const sellerDailySalesAggregated = useMemo(() => {
     const aggregated = aggregateSales(sellerDailySalesRaw);
@@ -447,10 +487,11 @@ export default function Dashboard() {
     
     let payoutDateStr = "N/A";
     if (selectedDate) {
-      const d = parseISO(selectedDate);
-      const isWednesday = d.getDay() === 3; // 3 is Wednesday
-      const maturity = addDays(d, isWednesday ? 16 : 13);
-      payoutDateStr = format(maturity, "PPP");
+      if (isSelectedDateFriday) {
+        payoutDateStr = format(parseISO(selectedDate), "PPP");
+      } else {
+        payoutDateStr = format(parseISO(calculateMaturityDate(selectedDate)), "PPP");
+      }
     }
 
     return {
@@ -459,7 +500,7 @@ export default function Dashboard() {
       payout: total - comm,
       payoutDate: payoutDateStr
     };
-  }, [sellerDailySalesRaw, selectedDate, isMounted]);
+  }, [sellerDailySalesRaw, selectedDate, isMounted, isSelectedDateFriday]);
 
   const sellerLifetimeStats = useMemo(() => {
     if (!authenticatedSellerId || !combinedSalesData) return { earned: 0, owed: 0, settled: 0, since: "N/A", avgWeekly: 0 };
@@ -516,9 +557,8 @@ export default function Dashboard() {
     combinedSalesData.forEach(sale => {
       if (sale.payoutStatus === 'paid') return;
       try {
-        const saleDateObj = parseISO(sale.saleDate);
-        const isWednesday = saleDateObj.getDay() === 3;
-        const maturityDate = startOfDay(addDays(saleDateObj, isWednesday ? 16 : 13));
+        const maturityDateStr = calculateMaturityDate(sale.saleDate);
+        const maturityDate = startOfDay(parseISO(maturityDateStr));
         const net = sale.price - (sale.commission || 0);
         const seller = sellers.find(s => s.id === sale.sellerId);
         const sellerName = seller?.name || sale.sellerId;
@@ -706,11 +746,7 @@ export default function Dashboard() {
 
     try {
       const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
-      
-      const d = parseISO(selectedDate);
-      const isWednesday = d.getDay() === 3;
-      const maturity = addDays(d, isWednesday ? 16 : 13);
-      const payoutDate = format(maturity, "EEEE, do MMMM yyyy");
+      const payoutDate = sellerStats.payoutDate;
 
       doc.setFontSize(22);
       doc.text("Newton's Collectables", 14, 20);
@@ -719,7 +755,7 @@ export default function Dashboard() {
       doc.line(14, 33, 196, 33);
       doc.text(`Seller: ${seller.name}`, 14, 43);
       doc.text(`Report Date: ${formattedDate}`, 14, 48);
-      doc.text(`Estimated Payout Date: ${payoutDate}`, 14, 53);
+      doc.text(isSelectedDateFriday ? `Settlement Run Date: ${payoutDate}` : `Estimated Payout Date: ${payoutDate}`, 14, 53);
 
       autoTable(doc, {
         startY: 63,
@@ -740,13 +776,13 @@ export default function Dashboard() {
       
       // Daily Totals Section
       doc.setFont(undefined, 'bold');
-      doc.text("Daily Summary", 120, finalY + 5);
+      doc.text(isSelectedDateFriday ? "Settlement Summary" : "Daily Summary", 120, finalY + 5);
       doc.setFont(undefined, 'normal');
       doc.rect(120, finalY + 8, 76, 35);
-      doc.text(`Daily Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 18);
+      doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 18);
       doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 24);
       doc.setFont(undefined, 'bold');
-      doc.text(`Daily Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 34);
+      doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 34);
 
       // Lifetime Account Overview Section
       const lifetimeY = finalY + 50;
@@ -893,7 +929,6 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="bg-slate-900 rounded-[3rem] p-12 text-center space-y-12 animate-in zoom-in-95 duration-1000 min-h-[600px] flex flex-col justify-center items-center relative overflow-hidden">
-              {/* Animated Background Element */}
               <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
               <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-red-600/10 blur-[120px] rounded-full animate-pulse" />
 
@@ -959,7 +994,6 @@ export default function Dashboard() {
       {/* Trade-in Vault Profile */}
       {profileId === 'trade' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-700">
-           {/* Calculator Card */}
            <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
               <CardHeader className="p-8 border-b bg-slate-50/20">
                  <div className="flex items-center gap-3">
@@ -1016,7 +1050,6 @@ export default function Dashboard() {
               </CardContent>
            </Card>
 
-           {/* History Card */}
            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
               <CardHeader className="p-8 border-b bg-slate-50/20">
                  <div className="flex items-center gap-3">
@@ -1456,7 +1489,11 @@ export default function Dashboard() {
             {authenticatedSellerId && (
               <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-6 w-full">
                 <Card className="shadow-sm border-none rounded-3xl bg-white group hover:shadow-xl transition-all duration-500">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Gross Sales Today</CardTitle></CardHeader>
+                  <CardHeader className="p-6 pb-2">
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-400">
+                      {isSelectedDateFriday ? "Total Run Amount" : "Gross Sales Today"}
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-slate-900">£{sellerStats.total.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-white">
@@ -1468,10 +1505,14 @@ export default function Dashboard() {
                   <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-green-600">£{sellerLifetimeStats.earned.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-primary text-white">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-white/60">Net Payout Today</CardTitle></CardHeader>
+                  <CardHeader className="p-6 pb-2">
+                    <CardTitle className="text-[10px] font-black uppercase text-white/60">
+                      {isSelectedDateFriday ? "Friday Settlement Total" : "Net Payout Today"}
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent className="p-6 pt-0">
                     <div className="text-4xl font-black tracking-tighter text-white">£{sellerStats.payout.toFixed(2)}</div>
-                    <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50"><Clock className="w-2.5 h-2.5" /> Due: {sellerStats.payoutDate}</div>
+                    <div className="mt-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white/50"><Clock className="w-2.5 h-2.5" /> {isSelectedDateFriday ? 'Settlement Run' : `Due: ${sellerStats.payoutDate}`}</div>
                   </CardContent>
                 </Card>
               </div>
@@ -1499,7 +1540,21 @@ export default function Dashboard() {
 
           {authenticatedSellerId && (
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-               <CardHeader className="p-8 border-b bg-slate-50/20"><div className="flex justify-between items-center"><CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle><div className="text-[10px] font-bold text-slate-400 uppercase">Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}</div></div></CardHeader>
+               <CardHeader className="p-8 border-b bg-slate-50/20">
+                 <div className="flex justify-between items-center">
+                   <div>
+                     <CardTitle className="text-sm font-black uppercase text-slate-900">
+                       {isSelectedDateFriday ? "Friday Settlement Run Itemization" : "Daily Transaction Itemization"}
+                     </CardTitle>
+                     <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                       {isSelectedDateFriday ? "Displaying all sales maturing on this payout date" : "Displaying sales logged on this specific day"}
+                     </p>
+                   </div>
+                   <div className="text-[10px] font-bold text-slate-400 uppercase">
+                     {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}
+                   </div>
+                 </div>
+               </CardHeader>
                <CardContent className="p-0">
                   <Table>
                     <TableHeader className="bg-slate-50/50">
@@ -1514,14 +1569,23 @@ export default function Dashboard() {
                     <TableBody>
                        {sellerDailySalesAggregated.map((sale) => (
                          <TableRow key={sale.id} className="h-16 hover:bg-slate-50/30">
-                           <TableCell className="pl-8 font-bold uppercase text-xs text-slate-900">{sale.cardName}</TableCell>
+                           <TableCell className="pl-8 font-bold uppercase text-xs text-slate-900">
+                             {sale.cardName}
+                             {isSelectedDateFriday && <p className="text-[8px] text-slate-400 mt-0.5">Logged: {sale.saleDate}</p>}
+                           </TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                            <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
                            <TableCell className="font-black text-slate-900">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                            <TableCell className="text-right pr-8 font-black text-primary">£{(sale as any).runningTotal.toFixed(2)}</TableCell>
                          </TableRow>
                        ))}
-                       {sellerDailySalesAggregated.length === 0 && <TableRow><TableCell colSpan={5} className="h-48 text-center text-slate-300 italic">No sales logged for this date.</TableCell></TableRow>}
+                       {sellerDailySalesAggregated.length === 0 && (
+                         <TableRow>
+                           <TableCell colSpan={5} className="h-48 text-center text-slate-300 italic">
+                             {isSelectedDateFriday ? "No settlements due for this Friday run." : "No sales logged for this date."}
+                           </TableCell>
+                         </TableRow>
+                       )}
                     </TableBody>
                   </Table>
                </CardContent>
