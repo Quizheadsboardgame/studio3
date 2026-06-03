@@ -37,6 +37,8 @@ export type Seller = {
   defaultCommission?: number;
   password?: string;
   archived?: boolean;
+  isShareholder?: boolean;
+  shareholderPercentage?: number;
 };
 
 export type InventoryItem = {
@@ -216,7 +218,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     return result;
   }, [combinedSalesData]);
 
-  const addSeller = useCallback((name: string, defaultCommission: number = 0) => {
+  const addSeller = useCallback((name: string, defaultCommission: number = 0, isShareholder: boolean = false, shareholderPercentage: number = 0) => {
     const targetRef = (effectiveProfile === 'manager' && staffSellersRef) ? staffSellersRef : sellersRef;
     if (!name || !targetRef) return;
     const sellerId = name.toLowerCase().replace(/\s+/g, '-');
@@ -227,7 +229,9 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
       name, 
       defaultCommission,
       password: randomPassword,
-      archived: false
+      archived: false,
+      isShareholder,
+      shareholderPercentage
     }, { merge: true });
   }, [sellersRef, staffSellersRef, effectiveProfile]);
 

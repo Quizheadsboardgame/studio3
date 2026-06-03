@@ -10,7 +10,9 @@
         "name": { "type": "string" },
         "defaultCommission": { "type": "number" },
         "password": { "type": "string" },
-        "archived": { "type": "boolean" }
+        "archived": { "type": "boolean" },
+        "isShareholder": { "type": "boolean" },
+        "shareholderPercentage": { "type": "number" }
       },
       "required": ["id", "name"]
     },

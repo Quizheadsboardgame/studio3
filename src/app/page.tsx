@@ -49,7 +49,9 @@ import {
   Bell,
   Phone,
   MessageSquare,
-  BarChart3
+  BarChart3,
+  Percent,
+  Landmark
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +62,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -253,6 +256,8 @@ export default function Dashboard() {
 
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerComm, setNewSellerComm] = useState("10");
+  const [isNewSellerShareholder, setIsNewSellerShareholder] = useState(false);
+  const [newSellerSharePercentage, setNewSellerSharePercentage] = useState("5");
 
   const [raffleName, setRaffleName] = useState("");
   const [raffleTickets, setRaffleTickets] = useState("");
@@ -509,6 +514,27 @@ export default function Dashboard() {
     };
   }, [sellerDailySalesRaw, selectedDate, isMounted, isSelectedDateFriday]);
 
+  const shareholderEarnings = useMemo(() => {
+    if (!authenticatedSellerId) return { current: 0, lifetime: 0 };
+    const seller = sellers.find(s => s.id === authenticatedSellerId);
+    if (!seller || !seller.isShareholder) return { current: 0, lifetime: 0 };
+
+    const sharePercentage = (seller.shareholderPercentage || 0) / 100;
+    
+    // Calculate current period earnings (based on current filtered date)
+    const currentCommTotal = allDailySalesRaw.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const currentEarnings = currentCommTotal * sharePercentage;
+
+    // Calculate lifetime earnings
+    const lifetimeCommTotal = combinedSalesData.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const lifetimeEarnings = lifetimeCommTotal * sharePercentage;
+
+    return {
+      current: currentEarnings,
+      lifetime: lifetimeEarnings
+    };
+  }, [authenticatedSellerId, sellers, allDailySalesRaw, combinedSalesData]);
+
   const sellerLifetimeStats = useMemo(() => {
     if (!authenticatedSellerId || !combinedSalesData) return { earned: 0, owed: 0, settled: 0, since: "N/A", avgWeekly: 0 };
     const sellerSales = combinedSalesData.filter(s => s.sellerId === authenticatedSellerId);
@@ -724,10 +750,18 @@ export default function Dashboard() {
 
   const handleAddNewSeller = () => {
     const comm = parseFloat(newSellerComm);
+    const sharePercentage = parseFloat(newSellerSharePercentage);
     if (newSellerName.trim() && !isNaN(comm)) {
-      addSeller(newSellerName.trim(), comm);
+      addSeller(
+        newSellerName.trim(), 
+        comm, 
+        isNewSellerShareholder, 
+        isNewSellerShareholder ? sharePercentage : 0
+      );
       setNewSellerName("");
       setNewSellerComm("10");
+      setIsNewSellerShareholder(false);
+      setNewSellerSharePercentage("5");
       toast({ title: "Seller Provisioned", description: `${newSellerName} added to the system.` });
     }
   };
@@ -1507,6 +1541,29 @@ export default function Dashboard() {
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">%</span>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-2 py-2">
+                    <Checkbox 
+                      id="isShareholder" 
+                      checked={isNewSellerShareholder} 
+                      onCheckedChange={(checked) => setIsNewSellerShareholder(!!checked)} 
+                    />
+                    <label htmlFor="isShareholder" className="text-xs font-black uppercase text-slate-600 cursor-pointer">Register as Shareholder</label>
+                  </div>
+                  {isNewSellerShareholder && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400">Dividend Share %</label>
+                      <div className="relative">
+                        <Input 
+                          type="number" 
+                          placeholder="5" 
+                          className="h-12 rounded-xl pr-10 font-black border-primary/20"
+                          value={newSellerSharePercentage}
+                          onChange={(e) => setNewSellerSharePercentage(e.target.value)}
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-primary">%</span>
+                      </div>
+                    </div>
+                  )}
                   <Button onClick={handleAddNewSeller} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Add Seller Entity</Button>
                 </CardContent>
               </Card>
@@ -1524,6 +1581,7 @@ export default function Dashboard() {
                       <TableRow>
                         <TableHead className="pl-6 font-black uppercase text-[10px] h-14">Seller Name</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Comm %</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Type</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Vault Key</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Status</TableHead>
                         <TableHead className="text-right pr-6 font-black uppercase text-[10px] h-14">Actions</TableHead>
@@ -1534,6 +1592,15 @@ export default function Dashboard() {
                         <TableRow key={seller.id} className={`hover:bg-slate-50/50 h-16 ${seller.archived ? 'opacity-50 grayscale' : ''}`}>
                           <TableCell className="pl-6 font-bold uppercase text-xs">{seller.name}</TableCell>
                           <TableCell className="font-black text-primary">{seller.defaultCommission}%</TableCell>
+                          <TableCell>
+                            {seller.isShareholder ? (
+                              <Badge className="bg-amber-100 text-amber-700 border-amber-200 font-black text-[8px] gap-1">
+                                <Landmark className="w-2.5 h-2.5" /> SHAREHOLDER ({seller.shareholderPercentage}%)
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">STANDARD</span>
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs font-bold tracking-widest">{seller.password}</TableCell>
                           <TableCell>
                             <Badge variant={seller.archived ? "outline" : "default"} className="text-[8px] font-black uppercase">
@@ -1553,6 +1620,12 @@ export default function Dashboard() {
                                 <DropdownMenuItem onClick={() => {
                                   if (confirm("Reset access key?")) updateSeller(seller.id, { password: Math.random().toString(36).slice(-6).toUpperCase() });
                                 }} className="gap-2"><KeyRound className="w-4 h-4" /> Reset Access Key</DropdownMenuItem>
+                                {seller.isShareholder && (
+                                  <DropdownMenuItem onClick={() => {
+                                    const newShare = prompt("Enter new share %:", seller.shareholderPercentage?.toString());
+                                    if (newShare !== null) updateSeller(seller.id, { shareholderPercentage: parseFloat(newShare) });
+                                  }} className="gap-2 text-amber-600"><Percent className="w-4 h-4" /> Edit Dividend Share</DropdownMenuItem>
+                                )}
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => handleArchiveSeller(seller)} className={`gap-2 ${seller.archived ? 'text-green-600' : 'text-destructive'}`}>
                                   {seller.archived ? <RefreshCw className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
@@ -1811,13 +1884,41 @@ export default function Dashboard() {
           </div>
 
           {authenticatedSellerId && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-               <Card className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+               {sellers.find(s => s.id === authenticatedSellerId)?.isShareholder && (
+                  <Card className="bg-amber-600 rounded-[3rem] p-10 text-white relative overflow-hidden group shadow-lg">
+                    <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-white/20 blur-[150px] rounded-full group-hover:scale-125 transition-transform duration-1000" />
+                    <div className="relative z-10 space-y-6">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-white/10 rounded-2xl"><Landmark className="w-6 h-6" /></div>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Dividend Portfolio</h2>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase text-white/60 tracking-widest">Period Dividends</p>
+                        <p className="text-4xl font-black">£{shareholderEarnings.current.toFixed(2)}</p>
+                      </div>
+                      <Separator className="bg-white/20" />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-[8px] font-black uppercase text-white/60">Shop Share</p>
+                          <p className="text-lg font-black">{sellers.find(s => s.id === authenticatedSellerId)?.shareholderPercentage}%</p>
+                        </div>
+                        <div>
+                          <p className="text-[8px] font-black uppercase text-white/60">Lifetime Earnings</p>
+                          <p className="text-lg font-black">£{shareholderEarnings.lifetime.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <p className="text-[8px] font-bold uppercase text-white/40 text-center">Calculated from total shop commissions</p>
+                    </div>
+                  </Card>
+               )}
+
+               <Card className={cn("bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group", sellers.find(s => s.id === authenticatedSellerId)?.isShareholder ? "lg:col-span-1" : "lg:col-span-1")}>
                   <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse transition-all duration-1000" />
                   <div className="relative z-10 space-y-6">
                      <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/10 rounded-2xl"><Target className="w-6 h-6 text-primary" /></div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Earnings Goal Calculator</h2>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Earning Goals</h2>
                      </div>
                      
                      <div className="space-y-4">
@@ -1858,17 +1959,17 @@ export default function Dashboard() {
                                  style={{ width: `${Math.min(100, incomeGoalCalc.progressPercent)}%` }} 
                               />
                            </div>
-                           <p className="text-[9px] font-bold text-white/30 uppercase text-center">£{incomeGoalCalc.remainingToGoal.toFixed(2)} more to reach your £{targetWeeklyPayout} goal</p>
+                           <p className="text-[9px] font-bold text-white/30 uppercase text-center">£{incomeGoalCalc.remainingToGoal.toFixed(2)} more to reach goal</p>
                         </div>
                      </div>
                   </div>
                </Card>
 
-               <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-6">
+               <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-6 lg:col-span-1">
                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                        <div className="p-3 bg-blue-50 rounded-2xl"><ListPlus className="w-6 h-6 text-blue-500" /></div>
-                       <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Preload Inventory</h2>
+                       <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Portfolio</h2>
                     </div>
                  </div>
 
@@ -1890,7 +1991,7 @@ export default function Dashboard() {
                           <Input type="number" placeholder="Price £" value={newInventoryPrice} onChange={(e) => setNewInventoryPrice(e.target.value)} className="h-11 rounded-xl font-black" />
                           <Input type="number" placeholder="Qty" value={newInventoryQuantity} onChange={(e) => setNewInventoryQuantity(e.target.value)} className="h-11 rounded-xl font-black" />
                        </div>
-                       <Button onClick={handleAddInventory} className="w-full h-11 rounded-xl bg-slate-900 font-black uppercase text-[10px]">Add to Pre-list</Button>
+                       <Button onClick={handleAddInventory} className="w-full h-11 rounded-xl bg-slate-900 font-black uppercase text-[10px]">Add to List</Button>
                     </div>
                     <Separator />
                     <ScrollArea className="h-[180px]">
@@ -1915,22 +2016,21 @@ export default function Dashboard() {
                  </div>
                </Card>
 
-               <Card className="bg-primary rounded-[3rem] p-10 border-none shadow-sm relative overflow-hidden group">
+               <Card className="bg-primary rounded-[3rem] p-10 border-none shadow-sm relative overflow-hidden group lg:col-span-1">
                   <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-white/10 blur-[150px] rounded-full group-hover:scale-110 transition-transform duration-1000" />
                   <div className="relative z-10 flex flex-col h-full space-y-6">
                     <div className="flex items-center gap-4 text-white">
                        <div className="p-3 bg-white/10 rounded-2xl"><Search className="w-6 h-6" /></div>
-                       <h2 className="text-xl font-black uppercase tracking-tighter">Wanted Items Board</h2>
+                       <h2 className="text-xl font-black uppercase tracking-tighter">Wanted Items</h2>
                     </div>
-                    <p className="text-white/60 font-bold text-xs uppercase tracking-wide">High Demand &bull; Secure Match Logic</p>
                     <ScrollArea className="flex-1">
                       <div className="space-y-3">
                         {wantedStock.map((wanted) => (
                           <div key={wanted.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors group">
                             <p className="text-white font-black uppercase text-xs">{wanted.cardName}</p>
                             <div className="flex justify-between items-center mt-2">
-                              <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Client: {wanted.customerName}</span>
-                              <Badge className="bg-white/10 text-[8px] font-black text-white/60">SOURCE ITEM</Badge>
+                              <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">Sourcing for Client</span>
+                              <Badge className="bg-white/10 text-[8px] font-black text-white/60">ACTIVE</Badge>
                             </div>
                           </div>
                         ))}
