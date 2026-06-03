@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
-import { format, addDays, parseISO, nextFriday, isBefore, isAfter, startOfDay, differenceInWeeks, startOfWeek } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, startOfDay, differenceInWeeks, startOfWeek, endOfMonth, startOfMonth, subDays } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -810,6 +810,79 @@ export default function Dashboard() {
       doc.save(`NC_Invoice_${invoiceNum}.pdf`);
     } catch (err) {
       toast({ variant: "destructive", title: "PDF Error", description: "Failed to generate report." });
+    }
+  };
+
+  const handleDownloadShareholderPDF = () => {
+    if (!authenticatedSellerId) return;
+    const seller = sellers.find(s => s.id === authenticatedSellerId);
+    if (!seller || !seller.isShareholder) return;
+
+    const doc = new jsPDF();
+    const today = new Date();
+    const monthName = format(today, "MMMM yyyy");
+    
+    // Find last Friday of the current month
+    const monthEndObj = endOfMonth(today);
+    let payoutDate = monthEndObj;
+    while (payoutDate.getDay() !== 5) {
+      payoutDate = subDays(payoutDate, 1);
+    }
+    const payoutDateStr = format(payoutDate, "do MMMM yyyy");
+
+    // Filter sales for the current month
+    const monthStartObj = startOfMonth(today);
+    const monthSales = combinedSalesData.filter(s => {
+      const saleDate = parseISO(s.saleDate);
+      return !isBefore(saleDate, monthStartObj) && !isAfter(saleDate, monthEndObj);
+    });
+
+    const totalShopGross = monthSales.reduce((acc, s) => acc + s.price, 0);
+    const totalShopComm = monthSales.reduce((acc, s) => acc + (s.commission || 0), 0);
+    const dividendAmount = (totalShopComm * (seller.shareholderPercentage || 0)) / 100;
+
+    try {
+      doc.setFontSize(22);
+      doc.text("Newton's Collectables", 14, 20);
+      doc.setFontSize(10);
+      doc.text(`DIVIDEND REPORT - ${monthName.toUpperCase()}`, 196, 20, { align: 'right' });
+      doc.line(14, 33, 196, 33);
+      
+      doc.setFont(undefined, 'bold');
+      doc.text(`Shareholder: ${seller.name}`, 14, 43);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Report Period: ${monthName}`, 14, 48);
+      doc.text(`Scheduled Payout Date: Friday, ${payoutDateStr}`, 14, 53);
+
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text("Monthly Performance Summary", 14, 70);
+      
+      autoTable(doc, {
+        startY: 75,
+        body: [
+          ["Total Shop Sales (Gross)", `£${totalShopGross.toFixed(2)}`],
+          ["Total Commissions Collected", `£${totalShopComm.toFixed(2)}`],
+          ["Your Dividend Share (%)", `${seller.shareholderPercentage}%`],
+          ["Net Dividend Payout", `£${dividendAmount.toFixed(2)}`]
+        ],
+        theme: 'striped',
+        styles: { fontSize: 11, cellPadding: 5 },
+        columnStyles: { 0: { fontStyle: 'bold', width: 100 }, 1: { halign: 'right' } }
+      });
+
+      const finalY = (doc as any).lastAutoTable.finalY + 20;
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'italic');
+      doc.text("Notes: Shareholder dividends are calculated based on the total commissions collected by the shop from all active sellers during the calendar month. Payouts are finalized on the last Friday of every month.", 14, finalY, { maxWidth: 180 });
+
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
+      
+      doc.save(`NC_Dividend_${seller.name}_${format(today, "MMM_yyyy")}.pdf`);
+    } catch (err) {
+      toast({ variant: "destructive", title: "PDF Error", description: "Failed to generate dividend report." });
     }
   };
 
@@ -1783,7 +1856,10 @@ export default function Dashboard() {
                           <p className="text-lg font-black">£{shareholderEarnings.lifetime.toFixed(2)}</p>
                         </div>
                       </div>
-                      <p className="text-[8px] font-bold uppercase text-white/40 text-center">Calculated from total shop commissions</p>
+                      <Button onClick={handleDownloadShareholderPDF} variant="outline" className="w-full h-10 rounded-2xl gap-2 font-black uppercase text-[9px] border-white/20 text-white hover:bg-white/10 hover:text-white">
+                        <FileText className="w-3.5 h-3.5" /> Export Dividend Report (PDF)
+                      </Button>
+                      <p className="text-[8px] font-bold uppercase text-white/40 text-center">Payouts on the last Friday of every month</p>
                     </div>
                   </Card>
                )}
