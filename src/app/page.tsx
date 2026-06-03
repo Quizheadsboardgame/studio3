@@ -64,7 +64,9 @@ import {
   Globe,
   Heart,
   Store,
-  Shield
+  Shield,
+  Lightbulb,
+  Target
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -169,10 +171,6 @@ function aggregateSales(salesList: Sale[]) {
   return [...cardsList, ...Object.values(packsMap)].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
 }
 
-/**
- * Calculates the maturity (payout) date for a sale.
- * Rule: 16 days if Wednesday, 13 days otherwise.
- */
 function calculateMaturityDate(saleDateStr: string) {
   try {
     const d = parseISO(saleDateStr);
@@ -249,7 +247,6 @@ export default function Dashboard() {
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerComm, setNewSellerComm] = useState("10");
 
-  // Raffle State
   const [raffleName, setRaffleName] = useState("");
   const [raffleTickets, setRaffleTickets] = useState("");
   const [isDrawMode, setIsDrawMode] = useState(false);
@@ -259,11 +256,14 @@ export default function Dashboard() {
   const [revealedWinners, setRevealedWinners] = useState<boolean[]>([false, false, false]);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // Trade-in Calculator State
   const [tradeInItems, setTradeInItems] = useState<TradeInItem[]>([]);
   const [tradeInItemName, setTradeInItemName] = useState("");
   const [tradeInItemValue, setTradeInItemValue] = useState("");
   const [tradeInCustomer, setTradeInCustomer] = useState("");
+
+  // Goal Calculator State
+  const [targetWeeklyPayout, setTargetWeeklyPayout] = useState("100");
+  const [calcCommission, setCalcCommission] = useState("10");
 
   useEffect(() => {
     setIsMounted(true);
@@ -787,6 +787,17 @@ export default function Dashboard() {
     }
   };
 
+  const incomeGoalCalc = useMemo(() => {
+    const income = parseFloat(targetWeeklyPayout) || 0;
+    const comm = parseFloat(calcCommission) || 10;
+    const factor = (100 - comm) / 100;
+    const needed = factor > 0 ? income / factor : 0;
+    return {
+      grossSalesNeeded: needed,
+      commissionPaid: needed - income
+    };
+  }, [targetWeeklyPayout, calcCommission]);
+
   if (!isMounted || !isLoaded || isUserLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>;
   }
@@ -864,11 +875,11 @@ export default function Dashboard() {
         <div className="space-y-12 animate-in fade-in zoom-in-95 duration-700">
            <section className="text-center space-y-4 py-12">
              <Badge className="bg-primary/10 text-primary border-primary/20 h-8 px-4 rounded-full font-black uppercase tracking-widest text-[10px]">Grow With Us</Badge>
-             <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">Why Sell With Newton's Collectables?</h1>
+             <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">Why Sell With Newton's?</h1>
              <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Join a professional ecosystem built by collectors, for collectors. We provide the tools you need to turn your hobby into a professional enterprise.</p>
            </section>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
                  <Shield className="w-8 h-8" />
@@ -890,32 +901,12 @@ export default function Dashboard() {
              </Card>
 
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-purple-50 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                 <Scale className="w-8 h-8" />
-               </div>
-               <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Expert Appraisals</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Take advantage of our professional trade-in and buyback vault. Get fair market valuations for your items with instant store credit or cash options.</p>
-               </div>
-             </Card>
-
-             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
                  <FileText className="w-8 h-8" />
                </div>
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Professional Reports</h3>
                  <p className="text-slate-500 text-sm font-medium leading-relaxed">Download official PDF invoices for every payout run. Perfect for your own accounting, tax reporting, or tracking your hobby's growth over time.</p>
-               </div>
-             </Card>
-
-             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-pink-50 flex items-center justify-center text-pink-600 group-hover:scale-110 transition-transform">
-                 <Store className="w-8 h-8" />
-               </div>
-               <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Shop Front Exposure</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">List your items in a high-traffic shop front. Reach a dedicated community of collectors and players without the hassle of individual shipping and fees.</p>
                </div>
              </Card>
 
@@ -928,6 +919,71 @@ export default function Dashboard() {
                  <p className="text-slate-500 text-sm font-medium leading-relaxed">View your average weekly payout and "Selling Since" milestones. Understand your selling velocity and refine your inventory strategy with hard data.</p>
                </div>
              </Card>
+           </div>
+
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="lg:col-span-2 bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden group">
+                 <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse transition-all duration-1000" />
+                 <div className="relative z-10 space-y-8">
+                    <div className="flex items-center gap-4">
+                       <div className="p-3 bg-white/10 rounded-2xl"><Target className="w-6 h-6 text-primary" /></div>
+                       <h2 className="text-3xl font-black uppercase tracking-tighter">Earnings Goal Calculator</h2>
+                    </div>
+                    <p className="text-white/60 font-medium">Set your target weekly payout and see exactly what gross sales volume you need to hit.</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
+                       <div className="space-y-4">
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black uppercase text-white/40">Target Weekly Payout (£)</label>
+                             <Input 
+                                type="number" 
+                                value={targetWeeklyPayout} 
+                                onChange={(e) => setTargetWeeklyPayout(e.target.value)} 
+                                className="h-14 bg-white/5 border-white/10 text-white font-black text-xl rounded-2xl focus-visible:ring-primary"
+                             />
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black uppercase text-white/40">Commission Tier (%)</label>
+                             <Select value={calcCommission} onValueChange={setCalcCommission}>
+                                <SelectTrigger className="h-14 bg-white/5 border-white/10 text-white font-black rounded-2xl">
+                                   <SelectValue placeholder="10%" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-2xl">
+                                   <SelectItem value="5" className="font-bold">5% (Elite)</SelectItem>
+                                   <SelectItem value="10" className="font-bold">10% (Standard)</SelectItem>
+                                   <SelectItem value="15" className="font-bold">15% (Managed)</SelectItem>
+                                   <SelectItem value="20" className="font-bold">20% (Full Service)</SelectItem>
+                                </SelectContent>
+                             </Select>
+                          </div>
+                       </div>
+
+                       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 text-center space-y-2">
+                          <p className="text-[10px] font-black uppercase text-primary tracking-widest">Weekly Sales Required</p>
+                          <p className="text-5xl font-black tracking-tighter">£{incomeGoalCalc.grossSalesNeeded.toFixed(2)}</p>
+                          <p className="text-[9px] font-bold text-white/30 uppercase pt-2">Est. NC Commission: £{incomeGoalCalc.commissionPaid.toFixed(2)}</p>
+                       </div>
+                    </div>
+                 </div>
+              </Card>
+
+              <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-8 flex flex-col justify-center">
+                 <div className="flex items-center gap-4">
+                    <div className="p-3 bg-amber-50 rounded-2xl"><Lightbulb className="w-6 h-6 text-amber-500" /></div>
+                    <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Pro Seller Tips</h2>
+                 </div>
+                 <div className="space-y-6">
+                    <div className="space-y-2">
+                       <p className="text-[10px] font-black uppercase text-primary">Sweet Spot Pricing</p>
+                       <p className="text-slate-600 font-bold leading-relaxed">Cards priced between <span className="text-slate-900 font-black">£5 and £25</span> sell the fastest on our floor. High-velocity inventory is the key to consistent weekly payouts.</p>
+                    </div>
+                    <Separator className="bg-slate-100" />
+                    <div className="space-y-2">
+                       <p className="text-[10px] font-black uppercase text-primary">Inventory Freshness</p>
+                       <p className="text-slate-600 font-bold leading-relaxed">Sellers who refresh their stock <span className="text-slate-900 font-black">twice a week</span> see 40% higher turnover than monthly listers.</p>
+                    </div>
+                 </div>
+              </Card>
            </div>
 
            <Card className="bg-slate-900 rounded-[3rem] p-12 text-center overflow-hidden relative group">
