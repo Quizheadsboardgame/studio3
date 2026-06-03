@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -1010,14 +1009,14 @@ export default function Dashboard() {
              <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Join a professional ecosystem built by collectors, for collectors. We provide the tools you need to turn your hobby into a professional enterprise.</p>
            </section>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
                  <Shield className="w-8 h-8" />
                </div>
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Personal Sales Vault</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Every seller gets a private, encrypted vault. Track every single card sale in real-time, view historical data, and audit your performance from any device.</p>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Every seller gets a private, encrypted vault. Track every card sale in real-time and audit performance from any device.</p>
                </div>
              </Card>
 
@@ -1027,7 +1026,7 @@ export default function Dashboard() {
                </div>
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Consistent Payouts</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Enjoy reliable Friday payout runs. Our automated settlement logic ensures your funds are cleared and ready precisely 13-16 days after a sale.</p>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Enjoy reliable Friday payout runs. Automated settlement logic ensures funds are cleared precisely 13-16 days after sale.</p>
                </div>
              </Card>
 
@@ -1037,7 +1036,7 @@ export default function Dashboard() {
                </div>
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Professional Reports</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Download official PDF invoices for every payout run. Perfect for your own accounting, tax reporting, or tracking your hobby's growth over time.</p>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Download official PDF invoices for every payout run. Perfect for your accounting and tracking your hobby's growth.</p>
                </div>
              </Card>
 
@@ -1047,7 +1046,47 @@ export default function Dashboard() {
                </div>
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Growth Analytics</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">View your average weekly payout and "Selling Since" milestones. Understand your selling velocity and refine your inventory strategy with hard data.</p>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Understand your selling velocity and refine your inventory strategy with hard data and weekly payout milestones.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                 <Landmark className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Shareholder Dividends</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">High-volume sellers can be promoted to Shareholders, earning a direct percentage of the total shop commission pool.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-purple-50 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
+                 <Calculator className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Trade-In Evaluation</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Access our professional trade-in calculator to log customer buybacks for store credit or cash with standardized rates.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-red-50 flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
+                 <Ticket className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Raffle Community</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Drive engagement and community spirit with integrated raffle entry logging and live animated draw sequences.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-rose-50 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
+                 <Target className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Customer Matching</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Be notified immediately when a customer is looking for stock you have preloaded, helping you sell faster and smarter.</p>
                </div>
              </Card>
            </div>
@@ -1215,7 +1254,7 @@ export default function Dashboard() {
                             <Button 
                               onClick={() => handleRevealNext(winnerIdx)} 
                               disabled={isDrawing}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              className="absolute inset-0 w-full h-full opacity-0_cursor-pointer"
                             />
                           )}
                         </div>
