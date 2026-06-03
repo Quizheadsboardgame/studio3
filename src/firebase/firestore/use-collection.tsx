@@ -8,6 +8,7 @@ import {
   FirestoreError,
   QuerySnapshot,
   CollectionReference,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -47,7 +48,7 @@ export function useCollection<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // Robust check for fully initialized Firestore reference
+    // 1. Initial robust check for a valid Firestore reference object
     if (!memoizedTargetRefOrQuery || typeof memoizedTargetRefOrQuery !== 'object') {
       setData(null);
       setIsLoading(false);
@@ -55,7 +56,8 @@ export function useCollection<T = any>(
       return;
     }
 
-    // Verify firestore existence to prevent internal canonifyTarget errors
+    // 2. Verify the reference is properly attached to a Firestore instance.
+    // This is critical to prevent internal canonifyTarget errors in the SDK.
     if (!memoizedTargetRefOrQuery.firestore) {
       return;
     }
@@ -64,50 +66,63 @@ export function useCollection<T = any>(
     setError(null);
 
     let isSubscribed = true;
+    let unsubscribe: Unsubscribe | null = null;
 
-    const unsubscribe = onSnapshot(
-      memoizedTargetRefOrQuery,
-      (snapshot: QuerySnapshot<DocumentData>) => {
-        if (!isSubscribed) return;
-        
-        const results: ResultItemType[] = [];
-        snapshot.forEach((doc) => {
-          results.push({ ...(doc.data() as T), id: doc.id });
-        });
-        
-        setData(results);
-        setError(null);
-        setIsLoading(false);
-      },
-      (err: FirestoreError) => {
-        if (!isSubscribed) return;
+    try {
+      // 3. Initiate the listener. We wrap this in a try-catch because onSnapshot
+      // calls internal SDK functions (like canonifyTarget) immediately.
+      unsubscribe = onSnapshot(
+        memoizedTargetRefOrQuery,
+        (snapshot: QuerySnapshot<DocumentData>) => {
+          if (!isSubscribed) return;
+          
+          const results: ResultItemType[] = [];
+          snapshot.forEach((doc) => {
+            results.push({ ...(doc.data() as T), id: doc.id });
+          });
+          
+          setData(results);
+          setError(null);
+          setIsLoading(false);
+        },
+        (err: FirestoreError) => {
+          if (!isSubscribed) return;
 
-        let path = 'unknown';
-        try {
-          if ('path' in memoizedTargetRefOrQuery) {
-            path = (memoizedTargetRefOrQuery as CollectionReference).path;
+          let path = 'unknown';
+          try {
+            if ('path' in memoizedTargetRefOrQuery) {
+              path = (memoizedTargetRefOrQuery as CollectionReference).path;
+            }
+          } catch (e) {
+            // Path extraction failed
           }
-        } catch (e) {
-          // Path extraction failed
+
+          const contextualError = new FirestorePermissionError({
+            operation: 'list',
+            path,
+          });
+
+          setError(contextualError);
+          setData(null);
+          setIsLoading(false);
+
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
         }
-
-        const contextualError = new FirestorePermissionError({
-          operation: 'list',
-          path,
-        });
-
-        setError(contextualError);
-        setData(null);
+      );
+    } catch (syncError: any) {
+      // 4. Handle any immediate internal SDK failures gracefully
+      if (isSubscribed) {
+        console.warn('Firestore onSnapshot failed to initialize:', syncError.message);
         setIsLoading(false);
-
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
       }
-    );
+    }
 
     return () => {
       isSubscribed = false;
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [memoizedTargetRefOrQuery]);
 

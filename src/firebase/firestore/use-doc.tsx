@@ -7,6 +7,7 @@ import {
   DocumentData,
   FirestoreError,
   DocumentSnapshot,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -45,7 +46,7 @@ export function useDoc<T = any>(
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
-    // Robust check for fully initialized Firestore reference
+    // 1. Initial robust check for a valid Firestore reference object
     if (!memoizedDocRef || typeof memoizedDocRef !== 'object') {
       setData(null);
       setIsLoading(false);
@@ -53,7 +54,7 @@ export function useDoc<T = any>(
       return;
     }
 
-    // Verify firestore existence to prevent internal canonifyTarget errors
+    // 2. Verify the reference is properly attached to a Firestore instance.
     if (!memoizedDocRef.firestore) {
       return;
     }
@@ -62,40 +63,52 @@ export function useDoc<T = any>(
     setError(null);
 
     let isSubscribed = true;
+    let unsubscribe: Unsubscribe | null = null;
 
-    const unsubscribe = onSnapshot(
-      memoizedDocRef,
-      (snapshot: DocumentSnapshot<DocumentData>) => {
-        if (!isSubscribed) return;
+    try {
+      // 3. Initiate the listener with protection against synchronous SDK internal failures
+      unsubscribe = onSnapshot(
+        memoizedDocRef,
+        (snapshot: DocumentSnapshot<DocumentData>) => {
+          if (!isSubscribed) return;
 
-        if (snapshot.exists()) {
-          setData({ ...(snapshot.data() as T), id: snapshot.id });
-        } else {
+          if (snapshot.exists()) {
+            setData({ ...(snapshot.data() as T), id: snapshot.id });
+          } else {
+            setData(null);
+          }
+          setError(null);
+          setIsLoading(false);
+        },
+        (err: FirestoreError) => {
+          if (!isSubscribed) return;
+
+          const contextualError = new FirestorePermissionError({
+            operation: 'get',
+            path: memoizedDocRef.path,
+          });
+
+          setError(contextualError);
           setData(null);
+          setIsLoading(false);
+
+          // trigger global error propagation
+          errorEmitter.emit('permission-error', contextualError);
         }
-        setError(null);
+      );
+    } catch (syncError: any) {
+      // 4. Graceful handling of internal listener failures
+      if (isSubscribed) {
+        console.warn('Firestore onSnapshot (doc) failed to initialize:', syncError.message);
         setIsLoading(false);
-      },
-      (err: FirestoreError) => {
-        if (!isSubscribed) return;
-
-        const contextualError = new FirestorePermissionError({
-          operation: 'get',
-          path: memoizedDocRef.path,
-        });
-
-        setError(contextualError);
-        setData(null);
-        setIsLoading(false);
-
-        // trigger global error propagation
-        errorEmitter.emit('permission-error', contextualError);
       }
-    );
+    }
 
     return () => {
       isSubscribed = false;
-      unsubscribe();
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [memoizedDocRef]);
 
