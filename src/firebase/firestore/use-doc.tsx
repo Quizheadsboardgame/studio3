@@ -46,10 +46,15 @@ export function useDoc<T = any>(
 
   useEffect(() => {
     // Robust check for fully initialized Firestore reference
-    if (!memoizedDocRef || typeof memoizedDocRef !== 'object' || !memoizedDocRef.firestore) {
+    if (!memoizedDocRef || typeof memoizedDocRef !== 'object') {
       setData(null);
       setIsLoading(false);
       setError(null);
+      return;
+    }
+
+    // Verify firestore existence to prevent internal canonifyTarget errors
+    if (!memoizedDocRef.firestore) {
       return;
     }
 
