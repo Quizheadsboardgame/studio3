@@ -213,7 +213,6 @@ export default function Dashboard() {
     addSale, 
     deleteSale, 
     updateSale, 
-    markSalesAsPaid, 
     setShopTotal, 
     deleteShopTotal,
     addExpense, 
@@ -235,9 +234,6 @@ export default function Dashboard() {
   const [editSaleCard, setEditSaleCard] = useState("");
   const [editSalePrice, setEditSalePrice] = useState("");
   const [editSaleSellerId, setEditSaleSellerId] = useState("");
-
-  const [isSettlementDialogOpen, setIsSettlementDialogOpen] = useState(false);
-  const [settlementBatch, setSettlementBatch] = useState<{ sellerId: string, saleIds: string[], originMap: Record<string, string>, total: number } | null>(null);
 
   const [financeCash, setFinanceCash] = useState("");
   const [financeCard, setFinanceCard] = useState("");
@@ -374,7 +370,6 @@ export default function Dashboard() {
       return;
     }
 
-    // Pick 3 winners (allowing duplicates if they have tickets)
     const picked: string[] = [];
     for (let i = 0; i < 3; i++) {
       const idx = Math.floor(Math.random() * pool.length);
@@ -394,10 +389,8 @@ export default function Dashboard() {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (isCountdownMode && countdown === 0) {
       setIsCountdownMode(false);
-      // Automatic staggered reveal sequence
       const runRevealSequence = async () => {
         setIsDrawing(true);
-        // Reveal index 2 (3rd), then 1 (2nd), then 0 (1st)
         for (const idx of [2, 1, 0]) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           setRevealedWinners(prev => {
@@ -441,11 +434,6 @@ export default function Dashboard() {
     return isManagerAuthenticated ? allDailySalesRaw : allDailySalesAggregated;
   }, [isManagerAuthenticated, allDailySalesRaw, allDailySalesAggregated]);
 
-  /**
-   * SELLER VAULT LOGIC:
-   * If selectedDate is a Friday, pull all sales whose calculated maturity date matches this date.
-   * Otherwise, pull sales logged on this specific day.
-   */
   const isSelectedDateFriday = useMemo(() => {
     if (!isMounted || !selectedDate) return false;
     try {
@@ -459,13 +447,11 @@ export default function Dashboard() {
     if (!profileId || !authenticatedSellerId || !selectedDate) return [];
     
     if (isSelectedDateFriday) {
-      // Pull all sales for this seller across time that MATURE on this Friday
       return combinedSalesData.filter(sale => {
         if (sale.sellerId !== authenticatedSellerId) return false;
         return calculateMaturityDate(sale.saleDate) === selectedDate;
       });
     } else {
-      // Pull sales actually LOGGED on this date
       return dailySalesData[authenticatedSellerId] || [];
     }
   }, [profileId, authenticatedSellerId, dailySalesData, selectedDate, combinedSalesData, isSelectedDateFriday]);
@@ -512,10 +498,14 @@ export default function Dashboard() {
     const firstSaleObj = parseISO(firstSale);
     const weeksActive = Math.max(1, differenceInWeeks(new Date(), firstSaleObj));
 
+    const today = startOfDay(new Date());
+
     const totals = sellerSales.reduce((acc, s) => {
       const net = s.price - (s.commission || 0);
       acc.earned += net;
-      if (s.payoutStatus === 'paid') {
+      
+      const maturityStr = calculateMaturityDate(s.saleDate);
+      if (maturityStr && isBefore(startOfDay(parseISO(maturityStr)), today)) {
         acc.settled += net;
       } else {
         acc.owed += net;
@@ -550,12 +540,11 @@ export default function Dashboard() {
     const nextFridayDate = startOfDay(addWeeks(thisFridayDate, 1));
 
     const forecast = {
-      thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> },
-      nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[], originMap: Record<string, string> }> }
+      thisFriday: { date: thisFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[] }> },
+      nextFriday: { date: nextFridayDate, total: 0, count: 0, sellers: {} as Record<string, { total: number, ids: string[] }> }
     };
 
     combinedSalesData.forEach(sale => {
-      if (sale.payoutStatus === 'paid') return;
       try {
         const maturityDateStr = calculateMaturityDate(sale.saleDate);
         const maturityDate = startOfDay(parseISO(maturityDateStr));
@@ -566,17 +555,15 @@ export default function Dashboard() {
         if (!isAfter(maturityDate, thisFridayDate)) {
           forecast.thisFriday.total += net;
           forecast.thisFriday.count += 1;
-          if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+          if (!forecast.thisFriday.sellers[sellerName]) forecast.thisFriday.sellers[sellerName] = { total: 0, ids: [] };
           forecast.thisFriday.sellers[sellerName].total += net;
           forecast.thisFriday.sellers[sellerName].ids.push(sale.id!);
-          forecast.thisFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         } else if (!isAfter(maturityDate, nextFridayDate)) {
           forecast.nextFriday.total += net;
           forecast.nextFriday.count += 1;
-          if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [], originMap: {} };
+          if (!forecast.nextFriday.sellers[sellerName]) forecast.nextFriday.sellers[sellerName] = { total: 0, ids: [] };
           forecast.nextFriday.sellers[sellerName].total += net;
           forecast.nextFriday.sellers[sellerName].ids.push(sale.id!);
-          forecast.nextFriday.sellers[sellerName].originMap[sale.id!] = sale.profileOrigin || 'staff';
         }
       } catch {
         // Skip
@@ -681,15 +668,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleMarkBatchPaid = (method: 'cash' | 'transfer') => {
-    if (settlementBatch) {
-      markSalesAsPaid(settlementBatch.saleIds, method, settlementBatch.originMap);
-      setIsSettlementDialogOpen(false);
-      setSettlementBatch(null);
-      toast({ title: "Settlement Confirmed", description: "Payout recorded in daily audit." });
-    }
-  };
-
   const handleSaveFinance = () => {
     const cashNum = parseFloat(financeCash);
     const cardNum = parseFloat(financeCard);
@@ -759,11 +737,10 @@ export default function Dashboard() {
 
       autoTable(doc, {
         startY: 63,
-        head: [['Card Details', 'Gross Price', 'Status', 'Net Payout', 'Running Total']],
+        head: [['Card Details', 'Gross Price', 'Net Payout', 'Running Total']],
         body: sellerDailySalesAggregated.map(sale => [
           sale.cardName, 
           `£${sale.price.toFixed(2)}`, 
-          sale.payoutStatus || 'Pending',
           `£${(sale.price - (sale.commission || 0)).toFixed(2)}`,
           `£${(sale as any).runningTotal.toFixed(2)}`
         ]),
@@ -774,7 +751,6 @@ export default function Dashboard() {
 
       const finalY = (doc as any).lastAutoTable.finalY + 10;
       
-      // Daily Totals Section
       doc.setFont(undefined, 'bold');
       doc.text(isSelectedDateFriday ? "Settlement Summary" : "Daily Summary", 120, finalY + 5);
       doc.setFont(undefined, 'normal');
@@ -784,7 +760,6 @@ export default function Dashboard() {
       doc.setFont(undefined, 'bold');
       doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 34);
 
-      // Lifetime Account Overview Section
       const lifetimeY = finalY + 50;
       doc.setFont(undefined, 'bold');
       doc.text("Lifetime Account Overview", 14, lifetimeY + 5);
@@ -875,7 +850,6 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Raffle Vault Profile */}
       {profileId === 'raffle' && (
         <div className="space-y-8 animate-in zoom-in-95 duration-700">
           {!isDrawMode ? (
@@ -991,7 +965,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Trade-in Vault Profile */}
       {profileId === 'trade' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in zoom-in-95 duration-700">
            <Card className="lg:col-span-2 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
@@ -1089,7 +1062,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Manager Profile Wrapper with Tabs */}
       {profileId === 'manager' && (
         <Tabs defaultValue="search" className="space-y-8 animate-in slide-in-from-top-4 duration-700">
           <TabsList className="bg-white border rounded-2xl h-14 p-1 shadow-sm gap-1 overflow-x-auto justify-start md:justify-center">
@@ -1132,7 +1104,6 @@ export default function Dashboard() {
                       <TableHead className="font-black uppercase text-[10px] h-14">Item Details</TableHead>
                       <TableHead className="font-black uppercase text-[10px] h-14">Price</TableHead>
                       <TableHead className="font-black uppercase text-[10px] h-14">NC Comm</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">Status</TableHead>
                       <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1146,7 +1117,6 @@ export default function Dashboard() {
                             <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
                             <TableCell className="font-black text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                             <TableCell className="font-black text-green-600">£{(sale.commission || 0).toFixed(2)}</TableCell>
-                            <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
                             <TableCell className="text-right pr-8">
                                <div className="flex items-center justify-end gap-1">
                                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
@@ -1156,10 +1126,10 @@ export default function Dashboard() {
                           </TableRow>
                         ))
                       ) : (
-                        <TableRow><TableCell colSpan={7} className="h-48 text-center text-slate-400 italic">No matches found for "{searchQuery}".</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">No matches found for "{searchQuery}".</TableCell></TableRow>
                       )
                     ) : (
-                      <TableRow><TableCell colSpan={7} className="h-48 text-center text-slate-400 italic">Enter a query above to search the master database.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">Enter a query above to search the master database.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -1181,11 +1151,10 @@ export default function Dashboard() {
                      <CardContent className="p-6 space-y-3">
                         <ScrollArea className="h-[300px]">
                           {Object.entries(payoutForecast.thisFriday.sellers).map(([name, data], i) => (
-                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent transition-all mb-2">
                               <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
                               <div className="flex items-center gap-3">
                                 <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
-                                <Button size="sm" className="h-7 px-3 text-[8px] font-black uppercase rounded-lg opacity-0 group-hover:opacity-100 transition-opacity bg-primary" onClick={() => { setSettlementBatch({ sellerId: name, saleIds: data.ids, originMap: data.originMap, total: data.total }); setIsSettlementDialogOpen(true); }}>Settle</Button>
                               </div>
                             </div>
                           ))}
@@ -1205,7 +1174,7 @@ export default function Dashboard() {
                      <CardContent className="p-6 space-y-3">
                         <ScrollArea className="h-[300px]">
                           {Object.entries(payoutForecast.nextFriday.sellers).map(([name, data], i) => (
-                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent hover:border-primary/10 transition-all mb-2">
+                            <div key={i} className="flex justify-between items-center text-xs p-3 rounded-xl bg-slate-50 group border border-transparent transition-all mb-2">
                               <span className="font-bold uppercase tracking-widest text-[10px] text-slate-600">{name}</span>
                               <span className="font-black text-slate-900">£{data.total.toFixed(2)}</span>
                             </div>
@@ -1315,7 +1284,6 @@ export default function Dashboard() {
         </Tabs>
       )}
 
-      {/* Finance Portal (Staff/Finance) */}
       {profileId === 'finance' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in zoom-in-95 duration-700">
           <Card className="shadow-sm border-none rounded-2xl bg-white">
@@ -1385,7 +1353,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Sales Entry (Staff Profile) */}
       {profileId === 'staff' && (
         <Card className="shadow-sm border-none rounded-2xl overflow-hidden bg-white animate-in slide-in-from-bottom-4 duration-700">
           <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
@@ -1470,7 +1437,6 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Personal Seller Portal */}
       {profileId === 'seller' && (
         <div className="space-y-8 animate-in zoom-in-95 duration-700">
           <div className="flex flex-col md:flex-row gap-6 items-center">
@@ -1497,7 +1463,7 @@ export default function Dashboard() {
                   <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-slate-900">£{sellerStats.total.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-white">
-                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Owed (Pending)</CardTitle></CardHeader>
+                  <CardHeader className="p-6 pb-2"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Total Owed (Future)</CardTitle></CardHeader>
                   <CardContent className="p-6 pt-0"><div className="text-4xl font-black tracking-tighter text-blue-600">£{sellerLifetimeStats.owed.toFixed(2)}</div></CardContent>
                 </Card>
                 <Card className="shadow-sm border-none rounded-3xl bg-white">
@@ -1561,7 +1527,6 @@ export default function Dashboard() {
                       <TableRow>
                         <TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead>
                         <TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead>
-                        <TableHead className="h-12 uppercase text-[10px] font-black">Status</TableHead>
                         <TableHead className="h-12 uppercase text-[10px] font-black">Net</TableHead>
                         <TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Running</TableHead>
                       </TableRow>
@@ -1574,14 +1539,13 @@ export default function Dashboard() {
                              {isSelectedDateFriday && <p className="text-[8px] text-slate-400 mt-0.5">Logged: {sale.saleDate}</p>}
                            </TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
-                           <TableCell><Badge variant={sale.payoutStatus === 'paid' ? 'default' : 'outline'} className="text-[8px] uppercase font-black">{sale.payoutStatus || 'Pending'}</Badge></TableCell>
                            <TableCell className="font-black text-slate-900">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                            <TableCell className="text-right pr-8 font-black text-primary">£{(sale as any).runningTotal.toFixed(2)}</TableCell>
                          </TableRow>
                        ))}
                        {sellerDailySalesAggregated.length === 0 && (
                          <TableRow>
-                           <TableCell colSpan={5} className="h-48 text-center text-slate-300 italic">
+                           <TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">
                              {isSelectedDateFriday ? "No settlements due for this Friday run." : "No sales logged for this date."}
                            </TableCell>
                          </TableRow>
@@ -1599,7 +1563,6 @@ export default function Dashboard() {
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">&copy; {currentYear} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard</p>
       </footer>
 
-      {/* Dialogs */}
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
         <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
           <DialogHeader className="items-center text-center">
@@ -1619,20 +1582,6 @@ export default function Dashboard() {
           </DialogHeader>
           <div className="py-6"><Input type="password" placeholder="ENTER PERSONAL KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl" value={sellerPasswordInput} onChange={(e) => setSellerPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSellerPasswordSubmit()} /></div>
           <DialogFooter><Button onClick={handleSellerPasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Authorize Access</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isSettlementDialogOpen} onOpenChange={setIsSettlementDialogOpen}>
-        <DialogContent className="rounded-3xl p-8 border-none shadow-2xl">
-          <DialogHeader className="items-center text-center">
-            <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Wallet className="w-8 h-8" /></div>
-            <DialogTitle className="text-2xl font-black uppercase">Settle Payout</DialogTitle>
-            <DialogDescription className="text-slate-500 font-bold">Confirm settlement of £{settlementBatch?.total.toFixed(2)} to {settlementBatch?.sellerId}.</DialogDescription>
-          </DialogHeader>
-          <div className="py-8 grid grid-cols-2 gap-4">
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('cash')}><Banknote className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Cash</span></Button>
-             <Button variant="outline" className="h-24 flex-col rounded-2xl gap-2 border-slate-100 hover:bg-primary/5 transition-all text-primary border-primary/20" onClick={() => handleMarkBatchPaid('transfer')}><Send className="w-6 h-6" /><span className="font-black uppercase text-[10px]">Transfer</span></Button>
-          </div>
         </DialogContent>
       </Dialog>
 

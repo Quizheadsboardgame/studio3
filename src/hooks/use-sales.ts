@@ -25,7 +25,6 @@ export type Sale = {
   saleDate: string;
   sellerId: string;
   profileOrigin?: string;
-  payoutStatus?: 'pending' | 'paid';
   paymentMethod?: 'cash' | 'transfer';
   paidAt?: string;
 };
@@ -203,8 +202,7 @@ export function useSales(profileId: string) {
       price,
       commission: commissionAmount,
       saleDate: date,
-      sellerId: sellerId,
-      payoutStatus: 'pending'
+      sellerId: sellerId
     }, { merge: true });
   }, [salesRef, sellers]);
 
@@ -229,19 +227,6 @@ export function useSales(profileId: string) {
     const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
     if (!targetRef || !saleId) return;
     deleteDocumentNonBlocking(doc(targetRef, saleId));
-  }, [salesRef, staffSalesRef]);
-
-  const markSalesAsPaid = useCallback((saleIds: string[], method: 'cash' | 'transfer', originMap: Record<string, string>) => {
-    saleIds.forEach(id => {
-      const origin = originMap[id];
-      const targetRef = (origin === 'staff' && staffSalesRef) ? staffSalesRef : salesRef;
-      if (!targetRef) return;
-      updateDocumentNonBlocking(doc(targetRef, id), {
-        payoutStatus: 'paid',
-        paymentMethod: method,
-        paidAt: new Date().toISOString()
-      });
-    });
   }, [salesRef, staffSalesRef]);
 
   const setShopTotal = useCallback((date: string, cash: number, card: number) => {
@@ -319,7 +304,6 @@ export function useSales(profileId: string) {
     addSale,
     updateSale,
     deleteSale,
-    markSalesAsPaid,
     setShopTotal,
     deleteShopTotal,
     addExpense,
