@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -709,11 +710,28 @@ export default function Dashboard() {
       });
 
       const finalY = (doc as any).lastAutoTable.finalY + 10;
-      doc.rect(120, finalY, 76, 35);
-      doc.text(`Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 12);
-      doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 18);
+      
+      // Daily Totals Section
       doc.setFont(undefined, 'bold');
-      doc.text(`Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 28);
+      doc.text("Daily Summary", 120, finalY + 5);
+      doc.setFont(undefined, 'normal');
+      doc.rect(120, finalY + 8, 76, 35);
+      doc.text(`Daily Gross: £${sellerStats.total.toFixed(2)}`, 125, finalY + 18);
+      doc.text(`NC Commission: £${sellerStats.commission.toFixed(2)}`, 125, finalY + 24);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Daily Net Payout: £${sellerStats.payout.toFixed(2)}`, 125, finalY + 34);
+
+      // Lifetime Account Overview Section
+      const lifetimeY = finalY + 50;
+      doc.setFont(undefined, 'bold');
+      doc.text("Lifetime Account Overview", 14, lifetimeY + 5);
+      doc.setFont(undefined, 'normal');
+      doc.rect(14, lifetimeY + 8, 182, 30);
+      doc.text(`Total Lifetime Earned (All Time): £${sellerLifetimeStats.earned.toFixed(2)}`, 20, lifetimeY + 18);
+      doc.text(`Total Already Settled: £${sellerLifetimeStats.settled.toFixed(2)}`, 20, lifetimeY + 24);
+      doc.setFont(undefined, 'bold');
+      doc.text(`Current Balance Owed (Pending Payout): £${sellerLifetimeStats.owed.toFixed(2)}`, 20, lifetimeY + 32);
+
       doc.setFontSize(8);
       doc.setFont(undefined, 'normal');
       doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
