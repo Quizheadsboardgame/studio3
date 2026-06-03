@@ -22,6 +22,7 @@
         "id": { "type": "string" },
         "cardName": { "type": "string" },
         "price": { "type": "number" },
+        "quantity": { "type": "number" },
         "commission": { "type": "number" },
         "saleDate": { "type": "string", "format": "date" },
         "sellerId": { "type": "string" },
@@ -36,7 +37,8 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
-        "price": { "type": "number" }
+        "price": { "type": "number" },
+        "quantity": { "type": "number" }
       },
       "required": ["name", "price"]
     },

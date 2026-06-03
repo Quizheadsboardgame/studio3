@@ -22,6 +22,7 @@ export type Sale = {
   id?: string;
   cardName: string;
   price: number;
+  quantity?: number;
   commission: number;
   saleDate: string;
   sellerId: string;
@@ -42,6 +43,7 @@ export type InventoryItem = {
   id?: string;
   name: string;
   price: number;
+  quantity?: number;
 };
 
 export type ShopTotal = {
@@ -80,24 +82,6 @@ export type RaffleEntry = {
   tickets: number;
   date: string;
 };
-
-function calculateMaturityDate(saleDateStr: string) {
-  try {
-    const d = parseISO(saleDateStr);
-    const isWednesday = d.getDay() === 3;
-    if (isWednesday) {
-      return format(startOfDay(addDays(d, 16)), "yyyy-MM-dd");
-    }
-    const minMaturity = addDays(d, 13);
-    let maturity = minMaturity;
-    while (maturity.getDay() !== 5) {
-      maturity = addDays(maturity, 1);
-    }
-    return format(startOfDay(maturity), "yyyy-MM-dd");
-  } catch {
-    return "";
-  }
-}
 
 export function useSales(profileId: string, currentSellerId?: string | null) {
   const { user } = useUser();
@@ -221,7 +205,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     updateDocumentNonBlocking(docRef, updatedFields);
   }, [sellersRef, staffSellersRef, effectiveProfile]);
 
-  const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number) => {
+  const addSale = useCallback((date: string, sellerId: string, cardName: string, price: number, quantity: number = 1) => {
     if (!salesRef) return;
     const seller = sellers.find(s => s.id === sellerId);
     const commissionPercentage = seller?.defaultCommission || 0;
@@ -232,6 +216,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
       id: docRef.id,
       cardName,
       price,
+      quantity,
       commission: commissionAmount,
       saleDate: date,
       sellerId: sellerId
@@ -322,13 +307,14 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     deleteDocumentNonBlocking(doc(raffleEntriesRef, entryId));
   }, [raffleEntriesRef]);
 
-  const addInventoryItem = useCallback((name: string, price: number) => {
+  const addInventoryItem = useCallback((name: string, price: number, quantity: number = 0) => {
     if (!inventoryRef) return;
     const docRef = doc(inventoryRef);
     setDocumentNonBlocking(docRef, {
       id: docRef.id,
       name,
-      price
+      price,
+      quantity
     }, { merge: true });
   }, [inventoryRef]);
 

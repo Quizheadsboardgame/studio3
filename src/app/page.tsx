@@ -246,6 +246,7 @@ export default function Dashboard() {
   
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
+  const [newSaleQuantity, setNewSaleQuantity] = useState("1");
   const [entrySellerId, setEntrySellerId] = useState("");
 
   const [newPackQuantity, setNewPackQuantity] = useState("1");
@@ -280,6 +281,7 @@ export default function Dashboard() {
 
   const [newInventoryName, setNewInventoryName] = useState("");
   const [newInventoryPrice, setNewInventoryPrice] = useState("");
+  const [newInventoryQuantity, setNewInventoryQuantity] = useState("1");
 
   useEffect(() => {
     setIsMounted(true);
@@ -651,10 +653,14 @@ export default function Dashboard() {
 
   const handleAddSale = () => {
     const priceNum = parseFloat(newSalePrice);
-    if (entrySellerId && newSaleCard.trim() && !isNaN(priceNum)) {
-      addSale(selectedDate, entrySellerId, newSaleCard.trim(), priceNum);
+    const qtyNum = parseInt(newSaleQuantity);
+    if (entrySellerId && newSaleCard.trim() && !isNaN(priceNum) && !isNaN(qtyNum)) {
+      const total = priceNum * qtyNum;
+      const finalCardName = qtyNum > 1 ? `${newSaleCard.trim()} (x${qtyNum})` : newSaleCard.trim();
+      addSale(selectedDate, entrySellerId, finalCardName, total, qtyNum);
       setNewSaleCard("");
       setNewSalePrice("");
+      setNewSaleQuantity("1");
       toast({ title: "Success", description: "Transaction logged." });
     }
   };
@@ -665,7 +671,7 @@ export default function Dashboard() {
     if (entrySellerId && !isNaN(qtyNum) && !isNaN(priceNum)) {
       const total = qtyNum * priceNum;
       const desc = `Booster Packs (${qtyNum}x @ £${priceNum.toFixed(2)})`;
-      addSale(selectedDate, entrySellerId, desc, total);
+      addSale(selectedDate, entrySellerId, desc, total, qtyNum);
       setNewPackQuantity("1");
       setNewPackPrice("");
       toast({ title: "Success", description: "Pack sale logged." });
@@ -748,10 +754,12 @@ export default function Dashboard() {
 
   const handleAddInventory = () => {
     const price = parseFloat(newInventoryPrice);
-    if (newInventoryName && !isNaN(price)) {
-      addInventoryItem(newInventoryName, price);
+    const qty = parseInt(newInventoryQuantity);
+    if (newInventoryName && !isNaN(price) && !isNaN(qty)) {
+      addInventoryItem(newInventoryName, price, qty);
       setNewInventoryName("");
       setNewInventoryPrice("");
+      setNewInventoryQuantity("1");
       toast({ title: "Item Preloaded", description: "Added to your quick-list." });
     }
   };
@@ -781,9 +789,10 @@ export default function Dashboard() {
 
       autoTable(doc, {
         startY: 63,
-        head: [['Card Details', 'Gross Price', 'Net Payout', 'Running Total']],
+        head: [['Card Details', 'Qty', 'Gross Price', 'Net Payout', 'Running Total']],
         body: sellerDailySalesAggregated.map(sale => [
-          sale.cardName, 
+          sale.cardName,
+          sale.quantity || 1,
           `£${sale.price.toFixed(2)}`, 
           `£${(sale.price - (sale.commission || 0)).toFixed(2)}`,
           `£${((sale as any).runningTotal || 0).toFixed(2)}`
@@ -1514,9 +1523,10 @@ export default function Dashboard() {
                           onClick={() => {
                             setNewSaleCard(item.name);
                             setNewSalePrice(item.price.toString());
+                            setNewSaleQuantity("1");
                           }}
                         >
-                          <Plus className="w-3 h-3" /> {item.name} (£{item.price})
+                          <Plus className="w-3 h-3" /> {item.name} (£{item.price}) {item.quantity ? `[Stk: ${item.quantity}]` : ''}
                         </Button>
                       ))}
                     </div>
@@ -1526,7 +1536,10 @@ export default function Dashboard() {
 
                 <div className="space-y-4">
                   <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
-                  <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price (Each)</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleQuantity} onChange={(e) => setNewSaleQuantity(e.target.value)} /></div>
+                  </div>
                   <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Card Sale</Button>
                 </div>
               </div>
@@ -1559,7 +1572,12 @@ export default function Dashboard() {
                     staffVaultTableData.map((sale) => (
                       <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16">
                         <TableCell className="pl-6"><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
-                        <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
+                        <TableCell className="font-bold uppercase text-xs">
+                          {sale.cardName}
+                          {sale.quantity && sale.quantity > 1 && (
+                            <span className="ml-2 text-[10px] text-slate-400 font-black">x{sale.quantity}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right pr-6 font-black text-base">£{sale.price.toFixed(2)}</TableCell>
                         {isManagerAuthenticated && (
                           <TableCell className="text-center px-2">
@@ -1671,7 +1689,10 @@ export default function Dashboard() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Add items you are bringing in to allow staff to "Quick-Add" your sales.</p>
                     <div className="space-y-3">
                        <Input placeholder="Card Name..." value={newInventoryName} onChange={(e) => setNewInventoryName(e.target.value)} className="h-11 rounded-xl font-bold" />
-                       <Input type="number" placeholder="Price £" value={newInventoryPrice} onChange={(e) => setNewInventoryPrice(e.target.value)} className="h-11 rounded-xl font-black" />
+                       <div className="grid grid-cols-2 gap-3">
+                          <Input type="number" placeholder="Price £" value={newInventoryPrice} onChange={(e) => setNewInventoryPrice(e.target.value)} className="h-11 rounded-xl font-black" />
+                          <Input type="number" placeholder="Qty" value={newInventoryQuantity} onChange={(e) => setNewInventoryQuantity(e.target.value)} className="h-11 rounded-xl font-black" />
+                       </div>
                        <Button onClick={handleAddInventory} className="w-full h-11 rounded-xl bg-slate-900 font-black uppercase text-[10px]">Add to Pre-list</Button>
                     </div>
                     <Separator />
@@ -1679,7 +1700,7 @@ export default function Dashboard() {
                        <div className="space-y-2">
                           {inventory.map((item) => (
                              <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border group">
-                                <span className="font-bold text-[10px] uppercase truncate max-w-[120px]">{item.name}</span>
+                                <span className="font-bold text-[10px] uppercase truncate max-w-[100px]">{item.name} {item.quantity ? `(x${item.quantity})` : ''}</span>
                                 <div className="flex items-center gap-3">
                                    <span className="font-black text-primary text-xs">£{item.price.toFixed(2)}</span>
                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -1733,6 +1754,7 @@ export default function Dashboard() {
                     <TableHeader className="bg-slate-50/50">
                       <TableRow>
                         <TableHead className="pl-8 h-12 uppercase text-[10px] font-black">Item</TableHead>
+                        <TableHead className="h-12 uppercase text-[10px] font-black text-center">Qty</TableHead>
                         <TableHead className="h-12 uppercase text-[10px] font-black">Gross</TableHead>
                         <TableHead className="h-12 uppercase text-[10px] font-black">Net</TableHead>
                         <TableHead className="text-right pr-8 h-12 uppercase text-[10px] font-black">Running</TableHead>
@@ -1745,6 +1767,9 @@ export default function Dashboard() {
                              {sale.cardName}
                              {isSelectedDateFriday && <p className="text-[8px] text-slate-400 mt-0.5">Logged: {sale.saleDate}</p>}
                            </TableCell>
+                           <TableCell className="text-center font-black text-slate-400 text-[10px]">
+                             {sale.quantity || 1}
+                           </TableCell>
                            <TableCell className="font-bold text-slate-900">£{sale.price.toFixed(2)}</TableCell>
                            <TableCell className="font-black text-slate-900">£{(sale.price - (sale.commission || 0)).toFixed(2)}</TableCell>
                            <TableCell className="text-right pr-8 font-black text-primary">£{((sale as any).runningTotal || 0).toFixed(2)}</TableCell>
@@ -1752,7 +1777,7 @@ export default function Dashboard() {
                        ))}
                        {sellerDailySalesAggregated.length === 0 && (
                          <TableRow>
-                           <TableCell colSpan={4} className="h-48 text-center text-slate-300 italic">
+                           <TableCell colSpan={5} className="h-48 text-center text-slate-300 italic">
                              {isSelectedDateFriday ? "No settlements due for this Friday run." : "No sales logged for this date."}
                            </TableCell>
                          </TableRow>
