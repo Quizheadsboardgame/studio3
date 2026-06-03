@@ -48,21 +48,6 @@ export type InventoryItem = {
   quantity?: number;
 };
 
-export type ShopTotal = {
-  date: string;
-  cashIntake: number;
-  cardIntake: number;
-  totalIntake: number;
-};
-
-export type Expense = {
-  id?: string;
-  date: string;
-  description: string;
-  amount: number;
-  category?: string;
-};
-
 export type TradeInItem = {
   name: string;
   value: number;
@@ -108,7 +93,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
 
   const effectiveProfile = useMemo(() => {
     const p = profileId?.toLowerCase();
-    if (['seller', 'finance', 'trade', 'raffle', 'benefits', 'inventory'].includes(p)) {
+    if (['seller', 'trade', 'raffle', 'benefits', 'inventory'].includes(p)) {
       return 'staff';
     }
     return p || 'staff';
@@ -133,16 +118,6 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     if (!db || !user || effectiveProfile !== 'manager') return null;
     return collection(db, "profiles", "staff", "sellers");
   }, [db, user, effectiveProfile]);
-
-  const shopTotalsRef = useMemoFirebase(() => {
-    if (!db || !user) return null;
-    return collection(db, "shop-finance-totals");
-  }, [db, user]);
-
-  const expensesRef = useMemoFirebase(() => {
-    if (!db || !user) return null;
-    return collection(db, "shop-finance-expenses");
-  }, [db, user]);
 
   const tradeInsRef = useMemoFirebase(() => {
     if (!db || !user) return null;
@@ -173,8 +148,6 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
   const { data: primarySalesData, isLoading: primarySalesLoading } = useCollection<Sale>(salesRef);
   const { data: staffSalesData, isLoading: staffSalesLoading } = useCollection<Sale>(staffSalesRef);
   const { data: staffSellersData, isLoading: staffSellersLoading } = useCollection<Seller>(staffSellersRef);
-  const { data: shopTotalsData } = useCollection<ShopTotal>(shopTotalsRef);
-  const { data: expensesData } = useCollection<Expense>(expensesRef);
   const { data: tradeInsData } = useCollection<TradeIn>(tradeInsRef);
   const { data: raffleEntriesData } = useCollection<RaffleEntry>(raffleEntriesRef);
   const { data: inventoryData, isLoading: inventoryLoading } = useCollection<InventoryItem>(inventoryRef);
@@ -283,37 +256,6 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     deleteDocumentNonBlocking(doc(targetRef, saleId));
   }, [salesRef, staffSalesRef]);
 
-  const setShopTotal = useCallback((date: string, cash: number, card: number) => {
-    if (!shopTotalsRef) return;
-    setDocumentNonBlocking(doc(shopTotalsRef, date), {
-      date,
-      cashIntake: cash,
-      cardIntake: card,
-      totalIntake: cash + card
-    }, { merge: true });
-  }, [shopTotalsRef]);
-
-  const deleteShopTotal = useCallback((date: string) => {
-    if (!shopTotalsRef) return;
-    deleteDocumentNonBlocking(doc(shopTotalsRef, date));
-  }, [shopTotalsRef]);
-
-  const addExpense = useCallback((date: string, description: string, amount: number) => {
-    if (!expensesRef) return;
-    const docRef = doc(expensesRef);
-    setDocumentNonBlocking(docRef, {
-      id: docRef.id,
-      date,
-      description,
-      amount
-    }, { merge: true });
-  }, [expensesRef]);
-
-  const deleteExpense = useCallback((expenseId: string) => {
-    if (!expensesRef) return;
-    deleteDocumentNonBlocking(doc(expensesRef, expenseId));
-  }, [expensesRef]);
-
   const addTradeIn = useCallback((trade: Omit<TradeIn, 'id'>) => {
     if (!tradeInsRef) return;
     const docRef = doc(tradeInsRef);
@@ -404,8 +346,6 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     sellers,
     sales: salesByDate,
     combinedSalesData,
-    shopTotals: shopTotalsData || [],
-    expenses: expensesData || [],
     tradeIns: tradeInsData || [],
     raffleEntries: raffleEntriesData || [],
     inventory,
@@ -417,10 +357,6 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     addSale,
     updateSale,
     deleteSale,
-    setShopTotal,
-    deleteShopTotal,
-    addExpense,
-    deleteExpense,
     addTradeIn,
     deleteTradeIn,
     addRaffleEntry,

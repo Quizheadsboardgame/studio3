@@ -104,7 +104,7 @@ import { cn } from "@/lib/utils";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ProfileType = 'manager' | 'staff' | 'inventory' | 'seller' | 'finance' | 'trade' | 'raffle' | 'benefits';
+type ProfileType = 'manager' | 'staff' | 'inventory' | 'seller' | 'trade' | 'raffle' | 'benefits';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -115,7 +115,6 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   staff: { primary: "221 83% 53%", ring: "221 83% 53%" },   
   inventory: { primary: "142 71% 45%", ring: "142 71% 45%" },
   seller: { primary: "142 71% 45%", ring: "142 71% 45%" },  
-  finance: { primary: "38 92% 50%", ring: "38 92% 50%" },
   trade: { primary: "262 83% 58%", ring: "262 83% 58%" },
   raffle: { primary: "0 84.2% 60.2%", ring: "0 84.2% 60.2%" },
   benefits: { primary: "199 89% 48%", ring: "199 89% 48%" },
@@ -208,8 +207,6 @@ export default function Dashboard() {
     sellers, 
     sales, 
     combinedSalesData, 
-    shopTotals, 
-    expenses, 
     tradeIns,
     raffleEntries,
     inventory,
@@ -221,10 +218,6 @@ export default function Dashboard() {
     addSale, 
     deleteSale, 
     updateSale, 
-    setShopTotal, 
-    deleteShopTotal,
-    addExpense, 
-    deleteExpense,
     addTradeIn,
     deleteTradeIn,
     addRaffleEntry,
@@ -248,11 +241,6 @@ export default function Dashboard() {
   const [editSaleCard, setEditSaleCard] = useState("");
   const [editSalePrice, setEditSalePrice] = useState("");
   const [editSaleSellerId, setEditSaleSellerId] = useState("");
-
-  const [financeCash, setFinanceCash] = useState("");
-  const [financeCard, setFinanceCard] = useState("");
-  const [expenseDesc, setExpenseDesc] = useState("");
-  const [expenseAmount, setExpenseAmount] = useState("");
 
   const [newSellerName, setNewSellerName] = useState("");
   const [newSellerComm, setNewSellerComm] = useState("10");
@@ -315,21 +303,6 @@ export default function Dashboard() {
       }
     }
   }, [profileId, authenticatedSellerId, sellers]);
-
-  const currentDayFinance = useMemo(() => {
-    if (!isMounted || !selectedDate) return null;
-    return shopTotals.find(t => t.date === selectedDate) || null;
-  }, [shopTotals, selectedDate, isMounted]);
-  
-  useEffect(() => {
-    if (currentDayFinance) {
-      setFinanceCash(currentDayFinance.cashIntake.toString());
-      setFinanceCard(currentDayFinance.cardIntake.toString());
-    } else {
-      setFinanceCash("");
-      setFinanceCard("");
-    }
-  }, [currentDayFinance]);
 
   const tradeMarketTotal = useMemo(() => tradeInItems.reduce((acc, item) => acc + item.value, 0), [tradeInItems]);
   const tradeOfferAmount = useMemo(() => tradeMarketTotal * 0.8, [tradeMarketTotal]);
@@ -440,7 +413,6 @@ export default function Dashboard() {
 
   const currentDayRaffleEntries = useMemo(() => raffleEntries.filter(r => r.date === selectedDate), [raffleEntries, selectedDate]);
   const currentDayTradeIns = useMemo(() => tradeIns.filter(t => t.date === selectedDate), [tradeIns, selectedDate]);
-  const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
 
   const dailySalesData = useMemo(() => {
     if (!isMounted || !selectedDate) return {};
@@ -722,32 +694,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleSaveFinance = () => {
-    const cashNum = parseFloat(financeCash);
-    const cardNum = parseFloat(financeCard);
-    if (!isNaN(cashNum) && !isNaN(cardNum)) {
-      setShopTotal(selectedDate, cashNum, cardNum);
-      toast({ title: "Finance Updated", description: "Daily intake synced to the shared ledger." });
-    }
-  };
-
-  const handleDeleteFinance = () => {
-    if (currentDayFinance) {
-      deleteShopTotal(selectedDate);
-      toast({ title: "Report Deleted", description: "Daily intake record removed." });
-    }
-  };
-
-  const handleAddExpense = () => {
-    const amt = parseFloat(expenseAmount);
-    if (expenseDesc && !isNaN(amt)) {
-      addExpense(selectedDate, expenseDesc, amt);
-      setExpenseDesc("");
-      setExpenseAmount("");
-      toast({ title: "Expense Added", description: "Recorded in the finance ledger." });
-    }
-  };
-
   const handleAddNewSeller = () => {
     const comm = parseFloat(newSellerComm);
     const sharePercentage = parseFloat(newSellerSharePercentage);
@@ -945,7 +891,6 @@ export default function Dashboard() {
                   {profileId === 'staff' && <UserCircle className="w-4 h-4 text-primary" />}
                   {profileId === 'inventory' && <Search className="w-4 h-4 text-primary" />}
                   {profileId === 'seller' && <User className="w-4 h-4 text-primary" />}
-                  {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
                   {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
                   {profileId === 'raffle' && <Ticket className="w-4 h-4 text-primary" />}
                   {profileId === 'benefits' && <Sparkles className="w-4 h-4 text-primary" />}
@@ -961,7 +906,6 @@ export default function Dashboard() {
               <DropdownMenuItem onClick={() => handleProfileSwitch('raffle')} className="gap-3 py-3 font-bold"><Ticket className="w-5 h-5 text-red-600" /> RAFFLE</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('benefits')} className="gap-3 py-3 font-bold"><Sparkles className="w-5 h-5 text-cyan-600" /> SELLER BENEFITS</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER VAULT</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3 font-bold"><Receipt className="w-5 h-5 text-amber-600" /> FINANCE</DropdownMenuItem>
               {isManagerAuthenticated && (
                 <>
                   <DropdownMenuSeparator />
@@ -1643,75 +1587,6 @@ export default function Dashboard() {
             </div>
           </TabsContent>
         </Tabs>
-      )}
-
-      {profileId === 'finance' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in zoom-in-95 duration-700">
-          <Card className="shadow-sm border-none rounded-2xl bg-white">
-            <CardHeader className="border-b bg-slate-50/20">
-              <CardTitle className="text-sm font-black uppercase flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-primary" /> Daily Intake Entry
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-8 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Cash Intake</label>
-                  <Input type="number" placeholder="0.00" value={financeCash} onChange={(e) => setFinanceCash(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400">Card Intake</label>
-                  <Input type="number" placeholder="0.00" value={financeCard} onChange={(e) => setFinanceCard(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <Button onClick={handleSaveFinance} className="flex-1 h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">
-                  {currentDayFinance ? 'Update Report' : 'Sync Daily Intake'}
-                </Button>
-                {currentDayFinance && (
-                  <Button variant="outline" onClick={handleDeleteFinance} className="h-12 w-12 rounded-xl text-destructive hover:bg-destructive/5 border-destructive/20">
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
-                )}
-              </div>
-              {currentDayFinance && (
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 text-center relative group">
-                  <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Recorded Intake</p>
-                  <p className="text-3xl font-black text-primary">£{currentDayFinance.totalIntake.toFixed(2)}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-none rounded-2xl bg-white">
-            <CardHeader className="border-b bg-slate-50/20">
-              <CardTitle className="text-sm font-black uppercase flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-primary" /> Shop Expenses
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-8 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input placeholder="Description..." value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="h-12 rounded-xl font-bold focus-visible:ring-primary" />
-                <Input type="number" placeholder="Amount" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} className="h-12 rounded-xl font-black focus-visible:ring-primary" />
-              </div>
-              <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Log Expense</Button>
-              <Separator />
-              <ScrollArea className="h-[150px]">
-                <div className="space-y-2">
-                  {currentDayExpenses.map((exp) => (
-                    <div key={exp.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <span className="font-bold text-xs uppercase">{exp.description}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-destructive">£{exp.amount.toFixed(2)}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteExpense(exp.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </div>
       )}
 
       {profileId === 'staff' && (

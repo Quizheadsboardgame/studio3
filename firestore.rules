@@ -27,14 +27,6 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
 
-    match /shop-finance-totals/{date} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /shop-finance-expenses/{expenseId} {
-      allow read, write: if isSignedIn();
-    }
-
     match /trade-ins/{tradeId} {
       allow read, write: if isSignedIn();
     }

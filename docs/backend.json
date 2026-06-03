@@ -44,29 +44,6 @@
       },
       "required": ["name", "price"]
     },
-    "ShopTotal": {
-      "title": "Shop Total",
-      "type": "object",
-      "properties": {
-        "date": { "type": "string", "format": "date" },
-        "cashIntake": { "type": "number" },
-        "cardIntake": { "type": "number" },
-        "totalIntake": { "type": "number" }
-      },
-      "required": ["date", "cashIntake", "cardIntake", "totalIntake"]
-    },
-    "Expense": {
-      "title": "Expense",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "date": { "type": "string", "format": "date" },
-        "description": { "type": "string" },
-        "amount": { "type": "number" },
-        "category": { "type": "string" }
-      },
-      "required": ["date", "description", "amount"]
-    },
     "TradeIn": {
       "title": "Trade-in Evaluation",
       "type": "object",
@@ -142,14 +119,6 @@
     "/profiles/{profileId}/sales/{saleId}": {
       "schema": { "$ref": "#/backend/entities/Sale" },
       "description": "Sales transactions."
-    },
-    "/shop-finance-totals/{date}": {
-      "schema": { "$ref": "#/backend/entities/ShopTotal" },
-      "description": "Daily total shop intake records."
-    },
-    "/shop-finance-expenses/{expenseId}": {
-      "schema": { "$ref": "#/backend/entities/Expense" },
-      "description": "Daily shop expenses."
     },
     "/trade-ins/{tradeId}": {
       "schema": { "$ref": "#/backend/entities/TradeIn" },
