@@ -19,6 +19,10 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
 
+    match /profiles/{profileId}/sellers/{sellerId}/inventory/{itemId} {
+      allow read, write: if isSignedIn() && isValidProfile(profileId);
+    }
+
     match /profiles/{profileId}/sales/{saleId} {
       allow read, write: if isSignedIn() && isValidProfile(profileId);
     }
