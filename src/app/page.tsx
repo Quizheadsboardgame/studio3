@@ -1,9 +1,8 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
-import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay } from "date-fns";
+import { format, addDays, parseISO, nextFriday, isBefore, isAfter, addWeeks, startOfDay, differenceInWeeks } from "date-fns";
 import { 
   Plus, 
   Search, 
@@ -57,7 +56,9 @@ import {
   Ticket,
   Trophy,
   Dices,
-  Timer
+  Timer,
+  CalendarDays,
+  TrendingUp as TrendingIcon
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -443,19 +444,34 @@ export default function Dashboard() {
     if (!isMounted) return { total: 0, commission: 0, payout: 0, payoutDate: "N/A" };
     const total = sellerDailySalesRaw.reduce((acc, s) => acc + s.price, 0);
     const comm = sellerDailySalesRaw.reduce((acc, s) => acc + (s.commission || 0), 0);
+    
+    let payoutDateStr = "N/A";
+    if (selectedDate) {
+      const d = parseISO(selectedDate);
+      const isWednesday = d.getDay() === 3; // 3 is Wednesday
+      const maturity = addDays(d, isWednesday ? 16 : 13);
+      payoutDateStr = format(maturity, "PPP");
+    }
+
     return {
       total,
       commission: comm,
       payout: total - comm,
-      payoutDate: selectedDate ? format(addDays(parseISO(selectedDate), 13), "PPP") : "N/A"
+      payoutDate: payoutDateStr
     };
   }, [sellerDailySalesRaw, selectedDate, isMounted]);
 
   const sellerLifetimeStats = useMemo(() => {
-    if (!authenticatedSellerId || !combinedSalesData) return { earned: 0, owed: 0, settled: 0 };
+    if (!authenticatedSellerId || !combinedSalesData) return { earned: 0, owed: 0, settled: 0, since: "N/A", avgWeekly: 0 };
     const sellerSales = combinedSalesData.filter(s => s.sellerId === authenticatedSellerId);
     
-    return sellerSales.reduce((acc, s) => {
+    if (sellerSales.length === 0) return { earned: 0, owed: 0, settled: 0, since: "N/A", avgWeekly: 0 };
+
+    const firstSale = sellerSales.reduce((min, s) => s.saleDate < min ? s.saleDate : min, sellerSales[0].saleDate);
+    const firstSaleObj = parseISO(firstSale);
+    const weeksActive = Math.max(1, differenceInWeeks(new Date(), firstSaleObj));
+
+    const totals = sellerSales.reduce((acc, s) => {
       const net = s.price - (s.commission || 0);
       acc.earned += net;
       if (s.payoutStatus === 'paid') {
@@ -465,6 +481,12 @@ export default function Dashboard() {
       }
       return acc;
     }, { earned: 0, owed: 0, settled: 0 });
+
+    return {
+      ...totals,
+      since: format(firstSaleObj, "MMM yyyy"),
+      avgWeekly: totals.earned / weeksActive
+    };
   }, [authenticatedSellerId, combinedSalesData]);
 
   const filteredSalesData = useMemo(() => {
@@ -495,7 +517,8 @@ export default function Dashboard() {
       if (sale.payoutStatus === 'paid') return;
       try {
         const saleDateObj = parseISO(sale.saleDate);
-        const maturityDate = startOfDay(addDays(saleDateObj, 13));
+        const isWednesday = saleDateObj.getDay() === 3;
+        const maturityDate = startOfDay(addDays(saleDateObj, isWednesday ? 16 : 13));
         const net = sale.price - (sale.commission || 0);
         const seller = sellers.find(s => s.id === sale.sellerId);
         const sellerName = seller?.name || sale.sellerId;
@@ -683,7 +706,11 @@ export default function Dashboard() {
 
     try {
       const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
-      const payoutDate = format(addDays(parseISO(selectedDate), 13), "EEEE, do MMMM yyyy");
+      
+      const d = parseISO(selectedDate);
+      const isWednesday = d.getDay() === 3;
+      const maturity = addDays(d, isWednesday ? 16 : 13);
+      const payoutDate = format(maturity, "EEEE, do MMMM yyyy");
 
       doc.setFontSize(22);
       doc.text("Newton's Collectables", 14, 20);
@@ -726,11 +753,13 @@ export default function Dashboard() {
       doc.setFont(undefined, 'bold');
       doc.text("Lifetime Account Overview", 14, lifetimeY + 5);
       doc.setFont(undefined, 'normal');
-      doc.rect(14, lifetimeY + 8, 182, 30);
+      doc.rect(14, lifetimeY + 8, 182, 45);
       doc.text(`Total Lifetime Earned (All Time): £${sellerLifetimeStats.earned.toFixed(2)}`, 20, lifetimeY + 18);
       doc.text(`Total Already Settled: £${sellerLifetimeStats.settled.toFixed(2)}`, 20, lifetimeY + 24);
+      doc.text(`Selling Since: ${sellerLifetimeStats.since}`, 20, lifetimeY + 30);
+      doc.text(`Average Weekly Payout: £${sellerLifetimeStats.avgWeekly.toFixed(2)}`, 20, lifetimeY + 36);
       doc.setFont(undefined, 'bold');
-      doc.text(`Current Balance Owed (Pending Payout): £${sellerLifetimeStats.owed.toFixed(2)}`, 20, lifetimeY + 32);
+      doc.text(`Current Balance Owed (Pending Payout): £${sellerLifetimeStats.owed.toFixed(2)}`, 20, lifetimeY + 44);
 
       doc.setFontSize(8);
       doc.setFont(undefined, 'normal');
@@ -1305,7 +1334,7 @@ export default function Dashboard() {
               </div>
               <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Log Expense</Button>
               <Separator />
-              <ScrollArea className="h-[150px]">
+              <scroll-area className="h-[150px]">
                 <div className="space-y-2">
                   {currentDayExpenses.map((exp) => (
                     <div key={exp.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -1317,7 +1346,7 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </scroll-area>
             </CardContent>
           </Card>
         </div>
@@ -1448,6 +1477,26 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          {authenticatedSellerId && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <Card className="shadow-sm border-none rounded-3xl bg-white p-8 flex items-center gap-6">
+                  <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-primary"><CalendarDays className="w-8 h-8" /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Selling Since</p>
+                    <p className="text-2xl font-black text-slate-900">{sellerLifetimeStats.since}</p>
+                  </div>
+               </Card>
+               <Card className="shadow-sm border-none rounded-3xl bg-white p-8 flex items-center gap-6">
+                  <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600"><TrendingIcon className="w-8 h-8" /></div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Avg. Weekly Payout</p>
+                    <p className="text-2xl font-black text-slate-900">£{sellerLifetimeStats.avgWeekly.toFixed(2)}</p>
+                  </div>
+               </Card>
+            </div>
+          )}
+
           {authenticatedSellerId && (
             <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
                <CardHeader className="p-8 border-b bg-slate-50/20"><div className="flex justify-between items-center"><CardTitle className="text-sm font-black uppercase text-slate-900">Transaction Itemization</CardTitle><div className="text-[10px] font-bold text-slate-400 uppercase">Report Period: {selectedDate ? format(parseISO(selectedDate), "EEEE, do MMMM yyyy") : 'No Date Selected'}</div></div></CardHeader>
