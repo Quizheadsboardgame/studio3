@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -59,7 +58,13 @@ import {
   Dices,
   Timer,
   CalendarDays,
-  TrendingUp as TrendingIcon
+  TrendingUp as TrendingIcon,
+  Sparkles,
+  Rocket,
+  Globe,
+  Heart,
+  Store,
+  Shield
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -107,7 +112,7 @@ import { cn } from "@/lib/utils";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade' | 'raffle';
+type ProfileType = 'manager' | 'staff' | 'seller' | 'finance' | 'trade' | 'raffle' | 'benefits';
 
 const MANAGER_PASSWORD = "Harley";
 const AUTH_EXPIRY_KEY = "newt_manager_auth_expiry";
@@ -120,6 +125,7 @@ const THEMES: Record<ProfileType, { primary: string; ring: string }> = {
   finance: { primary: "38 92% 50%", ring: "38 92% 50%" },
   trade: { primary: "262 83% 58%", ring: "262 83% 58%" },
   raffle: { primary: "0 84.2% 60.2%", ring: "0 84.2% 60.2%" },
+  benefits: { primary: "199 89% 48%", ring: "199 89% 48%" },
 };
 
 function Pokeball({ isOpen, className }: { isOpen: boolean; className?: string }) {
@@ -579,7 +585,7 @@ export default function Dashboard() {
       return;
     }
     setProfileId(newProfile);
-    if (newProfile !== 'seller') {
+    if (newProfile !== 'seller' && newProfile !== 'benefits') {
       setAuthenticatedSellerId(null);
       setSelectedSellerId("");
     }
@@ -818,6 +824,7 @@ export default function Dashboard() {
                   {profileId === 'finance' && <Receipt className="w-4 h-4 text-primary" />}
                   {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
                   {profileId === 'raffle' && <Ticket className="w-4 h-4 text-primary" />}
+                  {profileId === 'benefits' && <Sparkles className="w-4 h-4 text-primary" />}
                   VAULT: {profileId}
                 </span>
               </Button>
@@ -827,7 +834,8 @@ export default function Dashboard() {
               <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('trade')} className="gap-3 py-3 font-bold"><Zap className="w-5 h-5 text-purple-600" /> TRADE-IN</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('raffle')} className="gap-3 py-3 font-bold"><Ticket className="w-5 h-5 text-red-600" /> RAFFLE</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('benefits')} className="gap-3 py-3 font-bold"><Sparkles className="w-5 h-5 text-cyan-600" /> SELLER BENEFITS</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER VAULT</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('finance')} className="gap-3 py-3 font-bold"><Receipt className="w-5 h-5 text-amber-600" /> FINANCE</DropdownMenuItem>
               {isManagerAuthenticated && (
                 <>
@@ -838,17 +846,100 @@ export default function Dashboard() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 h-11 shadow-sm">
-            <CalendarIcon className="w-4 h-4 text-primary" />
-            <input 
-              type="date" 
-              className="bg-transparent outline-none text-sm font-bold uppercase text-slate-700"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-          </div>
+          {profileId !== 'benefits' && (
+            <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 h-11 shadow-sm">
+              <CalendarIcon className="w-4 h-4 text-primary" />
+              <input 
+                type="date" 
+                className="bg-transparent outline-none text-sm font-bold uppercase text-slate-700"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </header>
+
+      {profileId === 'benefits' && (
+        <div className="space-y-12 animate-in fade-in zoom-in-95 duration-700">
+           <section className="text-center space-y-4 py-12">
+             <Badge className="bg-primary/10 text-primary border-primary/20 h-8 px-4 rounded-full font-black uppercase tracking-widest text-[10px]">Grow With Us</Badge>
+             <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">Why Sell With Newton's Collectables?</h1>
+             <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Join a professional ecosystem built by collectors, for collectors. We provide the tools you need to turn your hobby into a professional enterprise.</p>
+           </section>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                 <Shield className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Personal Sales Vault</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Every seller gets a private, encrypted vault. Track every single card sale in real-time, view historical data, and audit your performance from any device.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
+                 <Wallet className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Consistent Payouts</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Enjoy reliable Friday payout runs. Our automated settlement logic ensures your funds are cleared and ready precisely 13-16 days after a sale.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-purple-50 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
+                 <Scale className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Expert Appraisals</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Take advantage of our professional trade-in and buyback vault. Get fair market valuations for your items with instant store credit or cash options.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
+                 <FileText className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Professional Reports</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Download official PDF invoices for every payout run. Perfect for your own accounting, tax reporting, or tracking your hobby's growth over time.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-pink-50 flex items-center justify-center text-pink-600 group-hover:scale-110 transition-transform">
+                 <Store className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Shop Front Exposure</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">List your items in a high-traffic shop front. Reach a dedicated community of collectors and players without the hassle of individual shipping and fees.</p>
+               </div>
+             </Card>
+
+             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
+               <div className="w-16 h-16 rounded-3xl bg-cyan-50 flex items-center justify-center text-cyan-600 group-hover:scale-110 transition-transform">
+                 <Rocket className="w-8 h-8" />
+               </div>
+               <div className="space-y-3">
+                 <h3 className="text-xl font-black uppercase tracking-tight">Growth Analytics</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">View your average weekly payout and "Selling Since" milestones. Understand your selling velocity and refine your inventory strategy with hard data.</p>
+               </div>
+             </Card>
+           </div>
+
+           <Card className="bg-slate-900 rounded-[3rem] p-12 text-center overflow-hidden relative group">
+             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse" />
+             <div className="relative z-10 space-y-8">
+               <h2 className="text-white text-4xl md:text-5xl font-black tracking-tight">Ready to join the elite seller circle?</h2>
+               <p className="text-white/60 font-medium text-lg max-w-xl mx-auto">Contact Harley or any member of the staff team to provision your seller vault and get your inventory onto the floor today.</p>
+               <Button onClick={() => handleProfileSwitch('staff')} className="bg-white text-slate-900 hover:bg-slate-100 h-14 px-10 rounded-2xl font-black uppercase text-xs">Access Staff Vault</Button>
+             </div>
+           </Card>
+        </div>
+      )}
 
       {profileId === 'raffle' && (
         <div className="space-y-8 animate-in zoom-in-95 duration-700">

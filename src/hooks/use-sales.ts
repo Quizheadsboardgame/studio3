@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useCallback } from "react";
@@ -78,7 +77,7 @@ export function useSales(profileId: string) {
   const { user } = useUser();
   const db = useFirestore();
 
-  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : (profileId === 'trade' ? 'staff' : (profileId === 'raffle' ? 'staff' : profileId)));
+  const effectiveProfile = profileId === 'seller' ? 'staff' : (profileId === 'finance' ? 'staff' : (profileId === 'trade' ? 'staff' : (profileId === 'raffle' ? 'staff' : (profileId === 'benefits' ? 'staff' : profileId))));
 
   const sellersRef = useMemoFirebase(() => {
     if (!db || !user) return null;
