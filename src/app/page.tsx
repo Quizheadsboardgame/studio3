@@ -9,8 +9,6 @@ import {
   Trash2, 
   Calendar as CalendarIcon,
   Pencil,
-  Check,
-  X,
   History,
   Coins,
   Loader2,
@@ -19,10 +17,8 @@ import {
   Lock,
   Settings2,
   Users,
-  Activity,
   CreditCard,
   TrendingUp,
-  BarChart3,
   LogOut,
   User,
   KeyRound,
@@ -31,46 +27,27 @@ import {
   Clock,
   Wallet,
   ArrowRightLeft,
-  Banknote,
-  Send,
   FileText,
   Download,
-  ChevronRight,
-  PieChart,
-  Calculator,
-  Receipt,
-  ArrowUpRight,
-  ArrowDownRight,
-  Scale,
-  TrendingDown,
-  Briefcase,
-  LayoutDashboard,
-  Box,
-  MoreVertical,
-  UserPlus,
-  ShieldAlert,
-  Save,
-  Filter,
-  ShoppingCart,
-  Zap,
   Ticket,
   Trophy,
   Dices,
-  Timer,
   CalendarDays,
   Sparkles,
   Rocket,
-  Globe,
-  Heart,
-  Store,
   Shield,
-  Lightbulb,
   Target,
   ListPlus,
-  Info
+  Info,
+  Calculator,
+  Receipt,
+  Zap,
+  Box,
+  MoreVertical,
+  UserPlus
 } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -82,7 +59,6 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuLabel, 
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
@@ -91,8 +67,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription
+  DialogFooter
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -108,7 +83,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem, RaffleEntry, InventoryItem } from "@/hooks/use-sales";
+import { useSales, Seller, Sale, TradeInItem } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -398,7 +373,7 @@ export default function Dashboard() {
     for (let i = 0; i < 3; i++) {
       const idx = Math.floor(Math.random() * tempPool.length);
       picked.push(tempPool[idx]);
-      const nameToRemove = tempPool[idx];
+      tempPool.splice(idx, 1);
     }
 
     setWinners(picked);
@@ -982,15 +957,6 @@ export default function Dashboard() {
                </div>
              </Card>
            </div>
-
-           <Card className="bg-slate-900 rounded-[3rem] p-12 text-center overflow-hidden relative group">
-             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/20 blur-[150px] rounded-full group-hover:animate-pulse" />
-             <div className="relative z-10 space-y-8">
-               <h2 className="text-white text-4xl md:text-5xl font-black tracking-tight">Ready to join the elite seller circle?</h2>
-               <p className="text-white/60 font-medium text-lg max-w-xl mx-auto">Contact Harley or any member of the staff team to provision your seller vault and get your inventory onto the floor today.</p>
-               <Button onClick={() => handleProfileSwitch('staff')} className="bg-white text-slate-900 hover:bg-slate-100 h-14 px-10 rounded-2xl font-black uppercase text-xs">Access Staff Vault</Button>
-             </div>
-           </Card>
         </div>
       )}
 
