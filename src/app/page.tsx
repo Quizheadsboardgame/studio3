@@ -67,7 +67,8 @@ import {
   Shield,
   Lightbulb,
   Target,
-  ListPlus
+  ListPlus,
+  Info
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -101,6 +102,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { useSales, Seller, ShopTotal, Expense, Sale, TradeIn, TradeInItem, RaffleEntry, InventoryItem } from "@/hooks/use-sales";
 import { 
@@ -149,12 +156,10 @@ function Pokeball({ isOpen, className }: { isOpen: boolean; className?: string }
 function calculateMaturityDate(saleDateStr: string) {
   try {
     const d = parseISO(saleDateStr);
-    // User logic: Wed = 16 days. Others = Friday at least 13 days away.
     const isWednesday = d.getDay() === 3;
     if (isWednesday) {
       return format(startOfDay(addDays(d, 16)), "yyyy-MM-dd");
     }
-    // Standard logic to find the next Friday that is at least 13 days away
     const minMaturity = addDays(d, 13);
     let maturity = minMaturity;
     while (maturity.getDay() !== 5) {
@@ -213,7 +218,6 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Goal Calculator State
   const [targetWeeklyPayout, setTargetWeeklyPayout] = useState("100");
   const [calcCommission, setCalcCommission] = useState("10");
 
@@ -331,21 +335,6 @@ export default function Dashboard() {
     }
   }, [currentDayFinance]);
 
-  const currentDayExpenses = useMemo(() => {
-    if (!isMounted || !selectedDate) return [];
-    return expenses.filter(e => e.date === selectedDate);
-  }, [expenses, selectedDate, isMounted]);
-
-  const currentDayTradeIns = useMemo(() => {
-    if (!isMounted || !selectedDate) return [];
-    return tradeIns.filter(t => t.date === selectedDate);
-  }, [tradeIns, selectedDate, isMounted]);
-
-  const currentDayRaffleEntries = useMemo(() => {
-    if (!isMounted || !selectedDate) return [];
-    return raffleEntries.filter(r => r.date === selectedDate);
-  }, [raffleEntries, selectedDate, isMounted]);
-
   const tradeMarketTotal = useMemo(() => tradeInItems.reduce((acc, item) => acc + item.value, 0), [tradeInItems]);
   const tradeOfferAmount = useMemo(() => tradeMarketTotal * 0.8, [tradeMarketTotal]);
   const cashOfferAmount = useMemo(() => tradeMarketTotal * 0.7, [tradeMarketTotal]);
@@ -386,13 +375,14 @@ export default function Dashboard() {
   };
 
   const handleStartDrawSequence = () => {
-    if (currentDayRaffleEntries.length === 0) {
+    const entries = raffleEntries.filter(r => r.date === selectedDate);
+    if (entries.length === 0) {
       toast({ variant: "destructive", title: "Error", description: "No entries for this date." });
       return;
     }
 
     const pool: string[] = [];
-    currentDayRaffleEntries.forEach(entry => {
+    entries.forEach(entry => {
       for (let i = 0; i < entry.tickets; i++) {
         pool.push(entry.name);
       }
@@ -404,9 +394,13 @@ export default function Dashboard() {
     }
 
     const picked: string[] = [];
+    const tempPool = [...pool];
     for (let i = 0; i < 3; i++) {
-      const idx = Math.floor(Math.random() * pool.length);
-      picked.push(pool[idx]);
+      const idx = Math.floor(Math.random() * tempPool.length);
+      picked.push(tempPool[idx]);
+      const nameToRemove = tempPool[idx];
+      // Keep other people but remove all tickets of this winner for next slot to avoid duplicates? 
+      // User didn't specify, standard raffle usually allows one person to win multiple times if they have many tickets.
     }
 
     setWinners(picked);
@@ -424,7 +418,6 @@ export default function Dashboard() {
       setIsCountdownMode(false);
       const runRevealSequence = async () => {
         setIsDrawing(true);
-        // Reveal 3rd, 2nd, 1st
         for (const idx of [2, 1, 0]) {
           await new Promise(resolve => setTimeout(resolve, 2000));
           setRevealedWinners(prev => {
@@ -450,6 +443,10 @@ export default function Dashboard() {
       setIsDrawing(false);
     }, 1000);
   };
+
+  const currentDayRaffleEntries = useMemo(() => raffleEntries.filter(r => r.date === selectedDate), [raffleEntries, selectedDate]);
+  const currentDayTradeIns = useMemo(() => tradeIns.filter(t => t.date === selectedDate), [tradeIns, selectedDate]);
+  const currentDayExpenses = useMemo(() => expenses.filter(e => e.date === selectedDate), [expenses, selectedDate]);
 
   const dailySalesData = useMemo(() => {
     if (!isMounted || !selectedDate) return {};
@@ -554,6 +551,27 @@ export default function Dashboard() {
       avgWeekly: totals.earned / weeksActive
     };
   }, [authenticatedSellerId, combinedSalesData]);
+
+  // Inventory Intelligence - Estimated Earnings
+  const inventoryEstimates = useMemo(() => {
+    const estimates: Record<string, { avg: number; count: number; estimatedNet: number }> = {};
+    const seller = sellers.find(s => s.id === authenticatedSellerId);
+    const commRate = seller?.defaultCommission || 10;
+
+    inventory.forEach(item => {
+      const matches = combinedSalesData.filter(s => s.cardName.toLowerCase().includes(item.name.toLowerCase()));
+      if (matches.length > 0) {
+        const avg = matches.reduce((acc, s) => acc + (s.price / (s.quantity || 1)), 0) / matches.length;
+        const netAvg = avg * (1 - (commRate / 100));
+        estimates[item.id!] = {
+          avg,
+          count: matches.length,
+          estimatedNet: netAvg * (item.quantity || 1)
+        };
+      }
+    });
+    return estimates;
+  }, [inventory, combinedSalesData, authenticatedSellerId, sellers]);
 
   const filteredSalesData = useMemo(() => {
     if (!searchQuery) return [];
@@ -1684,9 +1702,18 @@ export default function Dashboard() {
                        <div className="p-3 bg-blue-50 rounded-2xl"><ListPlus className="w-6 h-6 text-blue-500" /></div>
                        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Preload Inventory</h2>
                     </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="w-4 h-4 text-slate-300 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="p-4 max-w-xs rounded-xl bg-slate-900 text-white border-none">
+                          <p className="text-xs font-bold leading-relaxed">Inventory intelligence predicts your net payout by averaging the historical selling price of these items across the entire Newton's ledger.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                  </div>
                  <div className="space-y-4">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed">Add items you are bringing in to allow staff to "Quick-Add" your sales.</p>
                     <div className="space-y-3">
                        <Input placeholder="Card Name..." value={newInventoryName} onChange={(e) => setNewInventoryName(e.target.value)} className="h-11 rounded-xl font-bold" />
                        <div className="grid grid-cols-2 gap-3">
@@ -1698,15 +1725,29 @@ export default function Dashboard() {
                     <Separator />
                     <ScrollArea className="h-[180px]">
                        <div className="space-y-2">
-                          {inventory.map((item) => (
-                             <div key={item.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border group">
-                                <span className="font-bold text-[10px] uppercase truncate max-w-[100px]">{item.name} {item.quantity ? `(x${item.quantity})` : ''}</span>
-                                <div className="flex items-center gap-3">
-                                   <span className="font-black text-primary text-xs">£{item.price.toFixed(2)}</span>
-                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          {inventory.map((item) => {
+                            const est = inventoryEstimates[item.id!];
+                            return (
+                              <div key={item.id} className="p-3 rounded-xl bg-slate-50 border group space-y-2">
+                                <div className="flex justify-between items-center">
+                                   <span className="font-bold text-[10px] uppercase truncate max-w-[120px]">{item.name} {item.quantity ? `(x${item.quantity})` : ''}</span>
+                                   <div className="flex items-center gap-3">
+                                      <span className="font-black text-slate-900 text-xs">£{item.price.toFixed(2)}</span>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                   </div>
                                 </div>
-                             </div>
-                          ))}
+                                {est && (
+                                  <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-100 animate-in fade-in slide-in-from-left-2">
+                                    <div className="flex items-center gap-2">
+                                      <Sparkles className="w-3 h-3 text-amber-500" />
+                                      <span className="text-[8px] font-black uppercase text-slate-400">Est. Net Payout</span>
+                                    </div>
+                                    <span className="text-[10px] font-black text-amber-600">£{est.estimatedNet.toFixed(2)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                           {inventory.length === 0 && <p className="text-center text-[10px] italic text-slate-300 py-8">No preloaded items</p>}
                        </div>
                     </ScrollArea>
