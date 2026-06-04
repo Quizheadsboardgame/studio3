@@ -881,7 +881,7 @@ export default function Dashboard() {
       
       doc.save(`NC_Dividend_${seller.name}_${format(today, "MMM_yyyy")}.pdf`);
     } catch (err) {
-      toast({ variant: "destructive", title: "PDF Error", description: "Failed to generate dividend report." });
+      toast({ variant: "destructive", title: "PDF Error", description: "Failed to dividend report." });
     }
   };
 
@@ -1141,7 +1141,10 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col gap-1">
                           <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-2"><User className="w-3 h-3" /> {wanted.customerName}</p>
-                          <p className="text-[10px] font-black uppercase text-primary tracking-wider flex items-center gap-2"><Phone className="w-3 h-3" /> {wanted.contactNumber}</p>
+                          <p className="text-[10px] font-black uppercase text-primary tracking-wider flex items-center gap-2">
+                            <Phone className="w-3 h-3" /> 
+                            {isManagerAuthenticated ? wanted.contactNumber : "•••• ••• ••• (MANAGER ONLY)"}
+                          </p>
                         </div>
                       </div>
                     ))}
