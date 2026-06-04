@@ -50,7 +50,11 @@ import {
   MessageSquare,
   BarChart3,
   Percent,
-  Landmark
+  Landmark,
+  Store,
+  MapPin,
+  Mail,
+  FileCheck
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -885,6 +889,67 @@ export default function Dashboard() {
     }
   };
 
+  const handleDownloadSignupPDF = () => {
+    const doc = new jsPDF();
+    try {
+      doc.setFontSize(24);
+      doc.setFont(undefined, 'bold');
+      doc.text("Join Newton's Market Stall", 14, 25);
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text("Bury St Edmunds Premier Card Collective", 14, 32);
+      doc.line(14, 35, 196, 35);
+
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text("How to Get Started:", 14, 50);
+      
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'normal');
+      const steps = [
+        "1. CONTACT US: Email hello@tradeintcg or visit our stall in Bury St Edmunds (Wed & Sat).",
+        "2. CONSULTATION: We'll discuss your cards and the best strategy to sell them.",
+        "3. REGISTRATION: Once approved, we'll add you to our Sales Tracker by name.",
+        "4. PRE-LOAD STOCK: Use your personal Portal to add cards you want to sell.",
+        "5. PHYSICAL LABELING: Your cards are stored safely, labeled with your name on the back.",
+        "6. LIVE TRACKING: Every time one of your cards sells, it's instantly logged for you.",
+        "7. FAIR PRICING: You set the prices, but we ensure they align with fair market value.",
+        "8. AUTOMATED PAYOUTS: Receive your net funds within 16 days of sale."
+      ];
+      
+      let currentY = 60;
+      steps.forEach(step => {
+        doc.text(step, 14, currentY, { maxWidth: 180 });
+        currentY += 12;
+      });
+
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text("Our Policy Highlights:", 14, 165);
+      
+      autoTable(doc, {
+        startY: 170,
+        body: [
+          ["Price Control", "You choose the price for your cards."],
+          ["Market Integrity", "We reserve the right to reject cards priced unfairly high."],
+          ["Liquidity Payout", "16-day payout cycle ensures funds are cleared for trades."],
+          ["Ownership", "Your name is physically attached to every card listed."]
+        ],
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 5 }
+      });
+
+      doc.setFontSize(8);
+      doc.setFont(undefined, 'normal');
+      doc.text(LEGAL_STATEMENT, 14, 285, { maxWidth: 180 });
+      doc.save("NC_Seller_Handbook.pdf");
+      toast({ title: "PDF Downloaded", description: "Your signup guide is ready." });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to generate handbook." });
+    }
+  };
+
   const incomeGoalCalc = useMemo(() => {
     const target = parseFloat(targetWeeklyPayout) || 0;
     const comm = parseFloat(calcCommission) || 10;
@@ -952,7 +1017,7 @@ export default function Dashboard() {
             className="h-14 w-auto object-contain"
             priority
           />
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1 ml-0.5">Sales and Trade-in Tracker</p>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1 ml-0.5">Bury St Edmunds Market Stall &bull; Wed & Sat</p>
         </div>
         <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <DropdownMenu>
@@ -966,22 +1031,22 @@ export default function Dashboard() {
                   {profileId === 'trade' && <Zap className="w-4 h-4 text-primary" />}
                   {profileId === 'raffle' && <Ticket className="w-4 h-4 text-primary" />}
                   {profileId === 'benefits' && <Sparkles className="w-4 h-4 text-primary" />}
-                  VAULT: {profileId}
+                  PORTAL: {profileId}
                 </span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 border-primary/10 shadow-xl">
-              <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MANAGER</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STAFF</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('manager')} className="gap-3 py-3 font-bold"><ShieldCheck className="w-5 h-5 text-slate-700" /> MARKET MANAGER</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('staff')} className="gap-3 py-3 font-bold"><UserCircle className="w-5 h-5 text-blue-600" /> STALL TEAM</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('inventory')} className="gap-3 py-3 font-bold"><Search className="w-5 h-5 text-emerald-600" /> STOCK SEARCH</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('trade')} className="gap-3 py-3 font-bold"><Zap className="w-5 h-5 text-purple-600" /> TRADE-IN</DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleProfileSwitch('raffle')} className="gap-3 py-3 font-bold"><Ticket className="w-5 h-5 text-red-600" /> RAFFLE</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('benefits')} className="gap-3 py-3 font-bold"><Sparkles className="w-5 h-5 text-cyan-600" /> SELLER BENEFITS</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER VAULT</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('benefits')} className="gap-3 py-3 font-bold"><Sparkles className="w-5 h-5 text-cyan-600" /> JOIN THE STALL</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleProfileSwitch('seller')} className="gap-3 py-3 font-bold"><User className="w-5 h-5 text-emerald-600" /> SELLER PORTAL</DropdownMenuItem>
               {isManagerAuthenticated && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="gap-3 py-3 text-destructive font-bold"><LogOut className="w-5 h-5" /> EXIT VAULT</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout} className="gap-3 py-3 text-destructive font-bold"><LogOut className="w-5 h-5" /> EXIT PORTAL</DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -1004,49 +1069,55 @@ export default function Dashboard() {
       {profileId === 'benefits' && (
         <div className="space-y-12 animate-in fade-in zoom-in-95 duration-700">
            <section className="text-center space-y-4 py-12">
-             <Badge className="bg-primary/10 text-primary border-primary/20 h-8 px-4 rounded-full font-black uppercase tracking-widest text-[10px]">Grow With Us</Badge>
-             <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">Why Sell With Newton's?</h1>
-             <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Join a professional ecosystem built by collectors, for collectors. We provide the tools you need to turn your hobby into a professional enterprise.</p>
+             <Badge className="bg-primary/10 text-primary border-primary/20 h-8 px-4 rounded-full font-black uppercase tracking-widest text-[10px]">Community Powered</Badge>
+             <h1 className="text-5xl md:text-6xl font-black text-slate-900 tracking-tighter">Sell at Bury Market</h1>
+             <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Newton's Collectables is Bury St Edmunds' premier card stall. We turn your hobby into a community enterprise every Wednesday and Saturday.</p>
+             <div className="flex flex-wrap justify-center gap-4 pt-6">
+               <Button onClick={handleDownloadSignupPDF} className="bg-primary hover:bg-primary/90 h-14 px-8 rounded-2xl font-black uppercase text-xs gap-3 shadow-lg"><Download className="w-5 h-5" /> Download Seller Handbook (PDF)</Button>
+               <Button variant="outline" className="h-14 px-8 rounded-2xl font-black uppercase text-xs gap-3 border-primary/20 text-primary shadow-sm" asChild>
+                 <a href="mailto:hello@tradeintcg"><Mail className="w-5 h-5" /> Email hello@tradeintcg</a>
+               </Button>
+             </div>
            </section>
 
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                 <Shield className="w-8 h-8" />
+                 <Store className="w-8 h-8" />
                </div>
                <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Personal Sales Vault</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Every seller gets a private, encrypted vault. Track every card sale in real-time and audit performance from any device.</p>
+                 <h3 className="text-xl font-black uppercase tracking-tight">Visit the Stall</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Find us at Bury St Edmunds market every Wednesday and Saturday. We discuss your sales options face-to-face and get your inventory set up in our ledger.</p>
                </div>
              </Card>
 
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-emerald-50 flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
-                 <Wallet className="w-8 h-8" />
+                 <Shield className="w-8 h-8" />
                </div>
                <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Consistent Payouts</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Enjoy reliable Friday payout runs. Automated settlement logic ensures funds are cleared precisely 13-16 days after sale.</p>
+                 <h3 className="text-xl font-black uppercase tracking-tight">Secure Inventory</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Every card you list with us is kept safe and professionally labeled with your seller name on the back, ensuring accurate tracking and security.</p>
                </div>
              </Card>
 
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-amber-50 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                 <FileText className="w-8 h-8" />
+                 <Wallet className="w-8 h-8" />
                </div>
                <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Professional Reports</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Download official PDF invoices for every payout run. Perfect for your accounting and tracking your hobby's growth.</p>
+                 <h3 className="text-xl font-black uppercase tracking-tight">16-Day Payouts</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">We settle funds within 16 days of sale. This window allows us to maintain liquidity even when your cards are traded by customers instead of sold for cash.</p>
                </div>
              </Card>
 
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-cyan-50 flex items-center justify-center text-cyan-600 group-hover:scale-110 transition-transform">
-                 <Rocket className="w-8 h-8" />
+               <div className="w-16 h-16 rounded-3xl bg-rose-50 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
+                 <MapPin className="w-8 h-8" />
                </div>
                <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Growth Analytics</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Understand your selling velocity and refine your inventory strategy with hard data and weekly payout milestones.</p>
+                 <h3 className="text-xl font-black uppercase tracking-tight">Local Presence</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Join a collective with deep roots in Bury St Edmunds. We handle the foot traffic and sales negotiations while you track it all from home.</p>
                </div>
              </Card>
 
@@ -1061,12 +1132,12 @@ export default function Dashboard() {
              </Card>
 
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-rose-50 flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
-                 <Target className="w-8 h-8" />
+               <div className="w-16 h-16 rounded-3xl bg-cyan-50 flex items-center justify-center text-cyan-600 group-hover:scale-110 transition-transform">
+                 <FileCheck className="w-8 h-8" />
                </div>
                <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Customer Matching</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Be notified immediately when a customer is looking for stock you have preloaded, helping you sell faster and smarter.</p>
+                 <h3 className="text-xl font-black uppercase tracking-tight">Fair Market Policy</h3>
+                 <p className="text-slate-500 text-sm font-medium leading-relaxed">You set your prices, but we help ensure they remain competitive. We reserve the right to reject items priced unfairly above market value.</p>
                </div>
              </Card>
            </div>
@@ -1080,7 +1151,7 @@ export default function Dashboard() {
               <CardHeader className="border-b bg-slate-50/20 px-8 py-6">
                 <div className="flex items-center gap-3">
                   <Target className="w-5 h-5 text-primary" />
-                  <CardTitle className="text-xl font-black uppercase">Inventory Search & Wanted List</CardTitle>
+                  <CardTitle className="text-xl font-black uppercase">Stall Inventory Search</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="p-8 space-y-6">
@@ -1278,7 +1349,7 @@ export default function Dashboard() {
               <CardHeader className="p-8 border-b bg-slate-50/20">
                  <div className="flex items-center gap-3">
                     <Calculator className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Trade-in Running Calculator</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase">Stall Trade-in Evaluator</CardTitle>
                  </div>
               </CardHeader>
               <CardContent className="p-8 space-y-8">
@@ -1334,7 +1405,7 @@ export default function Dashboard() {
               <CardHeader className="p-8 border-b bg-slate-50/20">
                  <div className="flex items-center gap-3">
                     <History className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Recent Buybacks</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase">Recent Stall Buybacks</CardTitle>
                  </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -1376,14 +1447,14 @@ export default function Dashboard() {
               <Search className="w-3.5 h-3.5" /> Search Audit
             </TabsTrigger>
             <TabsTrigger value="payouts" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
-              <Wallet className="w-3.5 h-3.5" /> Settlements
+              <Wallet className="w-3.5 h-3.5" /> Stall Payouts
             </TabsTrigger>
             <TabsTrigger value="matches" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
               <Bell className="w-3.5 h-3.5" /> Stock Matches
               {stockMatches.length > 0 && <Badge className="ml-2 h-4 w-4 p-0 flex items-center justify-center bg-red-600 text-[8px] animate-pulse">{stockMatches.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="sellers" className="rounded-xl font-black uppercase text-[10px] gap-2 h-full px-4 md:px-6 data-[state=active]:bg-primary data-[state=active]:text-white whitespace-nowrap">
-              <Users className="w-3.5 h-3.5" /> Sellers
+              <Users className="w-3.5 h-3.5" /> Stall Sellers
             </TabsTrigger>
           </TabsList>
 
@@ -1393,7 +1464,7 @@ export default function Dashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <Search className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Search Vault Database</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase">Search Ledger Database</CardTitle>
                   </div>
                   <div className="relative w-full md:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1414,7 +1485,7 @@ export default function Dashboard() {
                       <TableHead className="font-black uppercase text-[10px] h-14">Seller</TableHead>
                       <TableHead className="font-black uppercase text-[10px] h-14">Item Details</TableHead>
                       <TableHead className="font-black uppercase text-[10px] h-14">Price</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">NC Comm</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] h-14">Stall Comm</TableHead>
                       <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1455,7 +1526,7 @@ export default function Dashboard() {
                      <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="bg-primary text-white p-2 rounded-xl"><ArrowRightLeft className="w-4 h-4" /></div>
-                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">This Friday</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p></div>
+                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">This Friday Run</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.thisFriday.date, "PPP")}</p></div>
                         </div>
                         <div className="text-right"><span className="text-2xl font-black text-slate-900">£{payoutForecast.thisFriday.total.toFixed(2)}</span></div>
                      </CardHeader>
@@ -1478,7 +1549,7 @@ export default function Dashboard() {
                      <CardHeader className="bg-slate-50 px-6 py-4 border-b flex flex-row items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="bg-slate-400 text-white p-2 rounded-xl"><Clock className="w-4 h-4" /></div>
-                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">Next Friday</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p></div>
+                          <div><CardTitle className="text-lg font-black uppercase text-slate-900">Next Friday Run</CardTitle><p className="text-[10px] text-slate-400 font-bold uppercase">{format(payoutForecast.nextFriday.date, "PPP")}</p></div>
                         </div>
                         <div className="text-right"><span className="text-2xl font-black text-slate-900">£{payoutForecast.nextFriday.total.toFixed(2)}</span></div>
                      </CardHeader>
@@ -1554,7 +1625,7 @@ export default function Dashboard() {
                 <CardHeader className="p-6 border-b bg-slate-50/20">
                   <div className="flex items-center gap-3">
                     <UserPlus className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Provision New Seller</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase">Add Stall Seller</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-6 space-y-4">
@@ -1568,7 +1639,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400">NC Commission %</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Stall Commission %</label>
                     <div className="relative">
                       <Input 
                         type="number" 
@@ -1611,7 +1682,7 @@ export default function Dashboard() {
                 <CardHeader className="p-6 border-b bg-slate-50/20">
                   <div className="flex items-center gap-3">
                     <Users className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Seller Directory & Access</CardTitle>
+                    <CardTitle className="text-sm font-black uppercase">Market Seller Directory</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1621,7 +1692,7 @@ export default function Dashboard() {
                         <TableHead className="pl-6 font-black uppercase text-[10px] h-14">Seller Name</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Comm %</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Type</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] h-14">Vault Key</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Portal Key</TableHead>
                         <TableHead className="font-black uppercase text-[10px] h-14">Status</TableHead>
                         <TableHead className="text-right pr-6 font-black uppercase text-[10px] h-14">Actions</TableHead>
                       </TableRow>
@@ -1658,7 +1729,7 @@ export default function Dashboard() {
                                 }} className="gap-2"><Settings2 className="w-4 h-4" /> Edit Commission</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                   if (confirm("Reset access key?")) updateSeller(seller.id, { password: Math.random().toString(36).slice(-6).toUpperCase() });
-                                }} className="gap-2"><KeyRound className="w-4 h-4" /> Reset Access Key</DropdownMenuItem>
+                                }} className="gap-2"><KeyRound className="w-4 h-4" /> Reset Portal Key</DropdownMenuItem>
                                 {seller.isShareholder && (
                                   <DropdownMenuItem onClick={() => {
                                     const newShare = prompt("Enter new share %:", seller.shareholderPercentage?.toString());
@@ -1690,7 +1761,7 @@ export default function Dashboard() {
             <CardHeader className="border-b bg-slate-50/20 px-8 py-6 flex flex-row items-center justify-between">
               <div className="flex items-center gap-3">
                 <History className="w-5 h-5 text-primary" />
-                <CardTitle className="text-xl font-black uppercase">Sales Ledger</CardTitle>
+                <CardTitle className="text-xl font-black uppercase">Stall Sales Ledger</CardTitle>
               </div>
               <Badge className="bg-primary text-white font-black">{selectedDate}</Badge>
             </CardHeader>
@@ -1715,7 +1786,7 @@ export default function Dashboard() {
                   
                   {entrySellerId && inventory.length > 0 && (
                     <div className="space-y-3">
-                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Quick-Select Preloaded Item</p>
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Quick-Select Seller Stock</p>
                       <Select onValueChange={(val) => {
                         const item = inventory.find(i => i.id === val);
                         if (item) {
@@ -1809,14 +1880,14 @@ export default function Dashboard() {
         <div className="space-y-8 animate-in zoom-in-95 duration-700">
           <div className="flex flex-col md:flex-row gap-6 items-center">
             <Card className="w-full md:w-1/3 shadow-sm border-none rounded-3xl overflow-hidden bg-white">
-               <CardHeader className="p-8 pb-4"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Entity Selection</CardTitle></CardHeader>
+               <CardHeader className="p-8 pb-4"><CardTitle className="text-[10px] font-black uppercase text-slate-400">Seller Entity Selection</CardTitle></CardHeader>
                <CardContent className="p-8 pt-0 space-y-6">
                   <Select value={selectedSellerId} onValueChange={handleSellerSelect}>
                     <SelectTrigger className="h-14 rounded-2xl font-black border-slate-100 bg-slate-50 focus:ring-primary"><SelectValue placeholder="WHICH SELLER?" /></SelectTrigger>
                     <SelectContent className="rounded-2xl">{activeSellers.map((s) => (<SelectItem key={s.id} value={s.id} className="font-bold py-4 uppercase text-xs">{s.name}</SelectItem>))}</SelectContent>
                   </Select>
                   {authenticatedSellerId && (
-                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px] border-primary/20 text-primary"><Download className="w-4 h-4" /> Export Report (PDF)</Button>
+                    <Button onClick={handleDownloadPDF} variant="outline" className="w-full h-12 rounded-2xl gap-2 font-black uppercase text-[10px] border-primary/20 text-primary"><Download className="w-4 h-4" /> Export Ledger Report (PDF)</Button>
                   )}
                </CardContent>
             </Card>
@@ -2079,8 +2150,12 @@ export default function Dashboard() {
       )}
 
       <footer className="py-12 border-t mt-12 bg-slate-50/50 rounded-t-3xl text-center space-y-4">
+        <div className="flex justify-center gap-6 mb-4">
+           <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500"><MapPin className="w-3 h-3" /> Bury St Edmunds Market</div>
+           <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500"><CalendarDays className="w-3 h-3" /> Wed & Sat (Operating Days)</div>
+        </div>
         <p className="text-xs font-bold text-slate-400 max-w-2xl mx-auto uppercase tracking-wider">{LEGAL_STATEMENT}</p>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">&copy; {currentYear} NC: Sales Tracker &bull; Dynamic Enterprise Dashboard</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">&copy; {currentYear} NC Stall Ledger &bull; Bury St Edmunds Market Stall Tracker</p>
       </footer>
 
       <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
@@ -2089,8 +2164,8 @@ export default function Dashboard() {
             <div className="bg-primary/10 text-primary p-4 rounded-3xl mb-4"><Lock className="w-8 h-8" /></div>
             <DialogTitle className="text-2xl font-black uppercase">Access Locked</DialogTitle>
           </DialogHeader>
-          <div className="py-6"><Input type="password" placeholder="ENCRYPTION KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} /></div>
-          <DialogFooter className="flex-col gap-3"><Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Unlock Vault</Button></DialogFooter>
+          <div className="py-6"><Input type="password" placeholder="STALL KEY..." className="h-14 bg-slate-50 border-none rounded-2xl text-center font-black tracking-widest text-xl text-primary" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} /></div>
+          <DialogFooter className="flex-col gap-3"><Button onClick={handlePasswordSubmit} className="w-full h-14 rounded-2xl font-black uppercase text-xs bg-primary hover:bg-primary/90">Unlock Ledger</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
