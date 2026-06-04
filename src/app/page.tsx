@@ -1009,7 +1009,7 @@ export default function Dashboard() {
              <p className="text-slate-500 font-bold max-w-2xl mx-auto text-lg">Join a professional ecosystem built by collectors, for collectors. We provide the tools you need to turn your hobby into a professional enterprise.</p>
            </section>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
              <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
                <div className="w-16 h-16 rounded-3xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
                  <Shield className="w-8 h-8" />
@@ -1057,26 +1057,6 @@ export default function Dashboard() {
                <div className="space-y-3">
                  <h3 className="text-xl font-black uppercase tracking-tight">Shareholder Dividends</h3>
                  <p className="text-slate-500 text-sm font-medium leading-relaxed">High-volume sellers can be promoted to Shareholders, earning a direct percentage of the total shop commission pool.</p>
-               </div>
-             </Card>
-
-             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-purple-50 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                 <Calculator className="w-8 h-8" />
-               </div>
-               <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Trade-In Evaluation</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Access our professional trade-in calculator to log customer buybacks for store credit or cash with standardized rates.</p>
-               </div>
-             </Card>
-
-             <Card className="shadow-sm border-none rounded-[2.5rem] bg-white p-8 space-y-6 hover:shadow-xl transition-all duration-500 group">
-               <div className="w-16 h-16 rounded-3xl bg-red-50 flex items-center justify-center text-red-600 group-hover:scale-110 transition-transform">
-                 <Ticket className="w-8 h-8" />
-               </div>
-               <div className="space-y-3">
-                 <h3 className="text-xl font-black uppercase tracking-tight">Raffle Community</h3>
-                 <p className="text-slate-500 text-sm font-medium leading-relaxed">Drive engagement and community spirit with integrated raffle entry logging and live animated draw sequences.</p>
                </div>
              </Card>
 
