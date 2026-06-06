@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -94,7 +95,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { useSales, Seller, Sale, TradeInItem } from "@/hooks/use-sales";
+import { useSales, Seller, Sale, TradeInItem, InventoryItem } from "@/hooks/use-sales";
 import { 
   useAuth, 
   useUser, 
@@ -226,6 +227,7 @@ export default function Dashboard() {
     addRaffleEntry,
     deleteRaffleEntry,
     addInventoryItem,
+    decrementInventoryItem,
     deleteInventoryItem,
     addWantedStock,
     deleteWantedStock,
@@ -236,6 +238,7 @@ export default function Dashboard() {
   const [newSalePrice, setNewSalePrice] = useState("");
   const [newSaleQuantity, setNewSaleQuantity] = useState("1");
   const [entrySellerId, setEntrySellerId] = useState("");
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string | null>(null);
 
   const [newPackQuantity, setNewPackQuantity] = useState("1");
   const [newPackPrice, setNewPackPrice] = useState("");
@@ -658,6 +661,13 @@ export default function Dashboard() {
       const total = priceNum * qtyNum;
       const finalCardName = qtyNum > 1 ? `${newSaleCard.trim()} (x${qtyNum})` : newSaleCard.trim();
       addSale(selectedDate, entrySellerId, finalCardName, total, qtyNum);
+      
+      // Handle inventory deduction if selected from list
+      if (selectedInventoryId) {
+        decrementInventoryItem(entrySellerId, selectedInventoryId, qtyNum);
+        setSelectedInventoryId(null);
+      }
+
       setNewSaleCard("");
       setNewSalePrice("");
       setNewSaleQuantity("1");
@@ -1793,17 +1803,29 @@ export default function Dashboard() {
                           setNewSaleCard(item.name);
                           setNewSalePrice(item.price.toString());
                           setNewSaleQuantity("1");
+                          setSelectedInventoryId(item.id!);
                         }
                       }}>
                         <SelectTrigger className="h-11 rounded-xl px-4 font-bold text-xs border-primary/20">
                           <SelectValue placeholder="Select an item to auto-fill..." />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl">
-                          {inventory.map((item) => (
-                            <SelectItem key={item.id} value={item.id!} className="font-bold py-3 uppercase text-[10px]">
-                              {item.name} — £{item.price.toFixed(2)} {item.quantity ? `(${item.quantity} in stock)` : ''}
-                            </SelectItem>
-                          ))}
+                          {inventory.map((item) => {
+                            const isOutOfStock = item.quantity !== undefined && item.quantity <= 0;
+                            return (
+                              <SelectItem 
+                                key={item.id} 
+                                value={item.id!} 
+                                className="font-bold py-3 uppercase text-[10px]"
+                                disabled={isOutOfStock}
+                              >
+                                {item.name} — £{item.price.toFixed(2)} 
+                                {item.quantity !== undefined ? (
+                                  item.quantity > 0 ? ` (${item.quantity} in stock)` : ' — OUT OF STOCK'
+                                ) : ''}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <Separator className="my-4" />
@@ -1811,9 +1833,9 @@ export default function Dashboard() {
                   )}
 
                   <div className="space-y-4">
-                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => setNewSaleCard(e.target.value)} /></div>
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Card Detail</label><Input placeholder="e.g., Rare Holographic Charizard" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleCard} onChange={(e) => { setNewSaleCard(e.target.value); setSelectedInventoryId(null); }} /></div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price (Each)</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => setNewSalePrice(e.target.value)} /></div></div>
+                      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Price (Each)</label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary">£</span><Input type="number" step="0.01" placeholder="0.00" className="h-12 rounded-xl pl-8 font-black focus-visible:ring-primary" value={newSalePrice} onChange={(e) => { setNewSalePrice(e.target.value); setSelectedInventoryId(null); }} /></div></div>
                       <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400">Quantity</label><Input type="number" min="1" className="h-12 rounded-xl px-4 font-bold focus-visible:ring-primary" value={newSaleQuantity} onChange={(e) => setNewSaleQuantity(e.target.value)} /></div>
                     </div>
                     <Button className="w-full h-12 rounded-xl font-black uppercase text-xs bg-primary hover:bg-primary/90" onClick={handleAddSale} disabled={!entrySellerId || !newSaleCard.trim() || !newSalePrice}>Log Card Sale</Button>
@@ -2041,14 +2063,18 @@ export default function Dashboard() {
                     <ScrollArea className="h-[180px]">
                        <div className="space-y-2">
                           {inventory.map((item) => {
+                            const isOutOfStock = item.quantity !== undefined && item.quantity <= 0;
                             return (
-                              <div key={item.id} className="p-3 rounded-xl bg-slate-50 border group flex justify-between items-center transition-all hover:bg-slate-100">
+                              <div key={item.id} className={cn("p-3 rounded-xl border group flex justify-between items-center transition-all", isOutOfStock ? "bg-red-50/50 border-red-100" : "bg-slate-50 hover:bg-slate-100 border-slate-200")}>
                                 <div className="flex flex-col">
-                                   <span className="font-bold text-[10px] uppercase truncate max-w-[150px]">{item.name}</span>
-                                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">QTY: {item.quantity || 1} &bull; £{item.price.toFixed(2)} EA</span>
+                                   <span className={cn("font-bold text-[10px] uppercase truncate max-w-[150px]", isOutOfStock ? "text-red-900" : "")}>{item.name}</span>
+                                   <div className="flex items-center gap-2">
+                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">QTY: {item.quantity || 0} &bull; £{item.price.toFixed(2)} EA</span>
+                                     {isOutOfStock && <Badge className="bg-red-600 text-white border-none h-3 px-1 text-[6px]">OUT OF STOCK</Badge>}
+                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                   <span className="font-black text-slate-900 text-xs">£{(item.price * (item.quantity || 1)).toFixed(2)}</span>
+                                   <span className={cn("font-black text-xs", isOutOfStock ? "text-red-400" : "text-slate-900")}>£{(item.price * (item.quantity || 0)).toFixed(2)}</span>
                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
                                 </div>
                               </div>

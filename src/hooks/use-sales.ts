@@ -5,7 +5,8 @@ import { useMemo, useCallback } from "react";
 import { 
   collection, 
   doc, 
-  serverTimestamp 
+  serverTimestamp,
+  increment
 } from "firebase/firestore";
 import { format, addDays, parseISO, isBefore, startOfDay } from "date-fns";
 import { 
@@ -315,6 +316,14 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     }
   }, [inventoryRef, wantedStockData, stockMatchesRef, currentSellerId, sellers]);
 
+  const decrementInventoryItem = useCallback((sellerId: string, itemId: string, quantity: number) => {
+    if (!db) return;
+    const docRef = doc(db, "profiles", "staff", "sellers", sellerId, "inventory", itemId);
+    updateDocumentNonBlocking(docRef, {
+      quantity: increment(-quantity)
+    });
+  }, [db]);
+
   const deleteInventoryItem = useCallback((itemId: string) => {
     if (!inventoryRef) return;
     deleteDocumentNonBlocking(doc(inventoryRef, itemId));
@@ -362,6 +371,7 @@ export function useSales(profileId: string, currentSellerId?: string | null) {
     addRaffleEntry,
     deleteRaffleEntry,
     addInventoryItem,
+    decrementInventoryItem,
     deleteInventoryItem,
     addWantedStock,
     deleteWantedStock,
