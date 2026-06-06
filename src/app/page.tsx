@@ -55,7 +55,8 @@ import {
   Store,
   MapPin,
   Mail,
-  FileCheck
+  FileCheck,
+  BrainCircuit
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,6 +104,7 @@ import {
 } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { generateDailySalesSummary } from "@/ai/flows/generate-daily-sales-summary";
 
 // PDF Generation
 import jsPDF from 'jspdf';
@@ -232,7 +234,7 @@ export default function Dashboard() {
     addWantedStock,
     deleteWantedStock,
     deleteStockMatch
-  } = useSales(profileId, profileId === 'seller' ? authenticatedSellerId : (profileId === 'staff' ? selectedSellerId : null));
+  } = useSales(profileId, profileId === 'seller' ? authenticatedSellerId : (profileId === 'staff' ? selectedSellerId : (profileId === 'manager' && selectedSellerId ? selectedSellerId : null)));
   
   const [newSaleCard, setNewSaleCard] = useState("");
   const [newSalePrice, setNewSalePrice] = useState("");
@@ -275,6 +277,9 @@ export default function Dashboard() {
   const [isWantedStockDialogOpen, setIsWantedStockDialogOpen] = useState(false);
   const [wantedStockCustomer, setWantedStockCustomer] = useState("");
   const [wantedStockContact, setWantedStockContact] = useState("");
+
+  const [isAiSummarizing, setIsAiSummarizing] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -662,10 +667,17 @@ export default function Dashboard() {
       const finalCardName = qtyNum > 1 ? `${newSaleCard.trim()} (x${qtyNum})` : newSaleCard.trim();
       addSale(selectedDate, entrySellerId, finalCardName, total, qtyNum);
       
-      // Handle inventory deduction if selected from list
+      // Smart Auto-match Inventory Deduction
+      // 1. Check if we have an explicit selected ID
       if (selectedInventoryId) {
         decrementInventoryItem(entrySellerId, selectedInventoryId, qtyNum);
         setSelectedInventoryId(null);
+      } else {
+        // 2. Try to find a match by exact name in current inventory
+        const matchedItem = inventory.find(i => i.name.toLowerCase() === newSaleCard.trim().toLowerCase());
+        if (matchedItem && matchedItem.id) {
+          decrementInventoryItem(entrySellerId, matchedItem.id, qtyNum);
+        }
       }
 
       setNewSaleCard("");
@@ -1000,6 +1012,40 @@ export default function Dashboard() {
       setStockSearchQuery("");
       setIsWantedStockDialogOpen(false);
       toast({ title: "Wanted Stock Notice Created", description: "A message has been posted to the Seller Vault boards." });
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!selectedDate || allDailySalesRaw.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No sales to summarize for this date." });
+      return;
+    }
+
+    setIsAiSummarizing(true);
+    setAiSummary(null);
+
+    const formattedSales: Record<string, any[]> = {};
+    activeSellers.forEach(seller => {
+      const sellerSales = dailySalesData[seller.id] || [];
+      if (sellerSales.length > 0) {
+        formattedSales[seller.name] = sellerSales.map(s => ({
+          card: s.cardName,
+          price: s.price
+        }));
+      }
+    });
+
+    try {
+      const result = await generateDailySalesSummary({
+        date: selectedDate,
+        dailySales: formattedSales
+      });
+      setAiSummary(result.summary);
+      toast({ title: "Analysis Complete", description: "Daily sales summary generated." });
+    } catch (err) {
+      toast({ variant: "destructive", title: "AI Error", description: "Failed to generate summary." });
+    } finally {
+      setIsAiSummarizing(false);
     }
   };
 
@@ -1469,64 +1515,89 @@ export default function Dashboard() {
           </TabsList>
 
           <TabsContent value="search" className="space-y-8 focus-visible:outline-none">
-            <Card className="shadow-sm border-none rounded-3xl bg-white overflow-hidden">
-              <CardHeader className="p-8 border-b bg-slate-50/20">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Search className="w-5 h-5 text-primary" />
-                    <CardTitle className="text-sm font-black uppercase">Search Ledger Database</CardTitle>
+            <div className="flex flex-col lg:flex-row gap-8">
+              <Card className="flex-1 shadow-sm border-none rounded-3xl bg-white overflow-hidden">
+                <CardHeader className="p-8 border-b bg-slate-50/20">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Search className="w-5 h-5 text-primary" />
+                      <CardTitle className="text-sm font-black uppercase">Search Ledger Database</CardTitle>
+                    </div>
+                    <div className="relative w-full md:w-96">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input 
+                        placeholder="Search items, sellers, or dates (YYYY-MM-DD)..." 
+                        className="pl-10 h-11 rounded-xl font-bold border-slate-100 focus:ring-primary"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="relative w-full md:w-96">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input 
-                      placeholder="Search items, sellers, or dates (YYYY-MM-DD)..." 
-                      className="pl-10 h-11 rounded-xl font-bold border-slate-100 focus:ring-primary"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50/50">
-                    <TableRow>
-                      <TableHead className="pl-8 font-black uppercase text-[10px] h-14">Date</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">Seller</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">Item Details</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">Price</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] h-14">Stall Comm</TableHead>
-                      <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {searchQuery ? (
-                      filteredSalesData.length > 0 ? (
-                        filteredSalesData.map((sale) => (
-                          <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16 transition-colors">
-                            <TableCell className="pl-8 font-mono text-[10px] font-bold text-slate-400">{sale.saleDate}</TableCell>
-                            <TableCell><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
-                            <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
-                            <TableCell className="font-black text-slate-900">£{sale.price.toFixed(2)}</TableCell>
-                            <TableCell className="font-black text-green-600">£{(sale.commission || 0).toFixed(2)}</TableCell>
-                            <TableCell className="text-right pr-8">
-                               <div className="flex items-center justify-end gap-1">
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                               </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead className="pl-8 font-black uppercase text-[10px] h-14">Date</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Seller</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Item Details</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Price</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] h-14">Stall Comm</TableHead>
+                        <TableHead className="text-right pr-8 font-black uppercase text-[10px] h-14">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {searchQuery ? (
+                        filteredSalesData.length > 0 ? (
+                          filteredSalesData.map((sale) => (
+                            <TableRow key={sale.id} className="hover:bg-slate-50/50 h-16 transition-colors">
+                              <TableCell className="pl-8 font-mono text-[10px] font-bold text-slate-400">{sale.saleDate}</TableCell>
+                              <TableCell><Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-primary/20 text-primary">{sellers.find(s => s.id === sale.sellerId)?.name || sale.sellerId}</Badge></TableCell>
+                              <TableCell className="font-bold uppercase text-xs">{sale.cardName}</TableCell>
+                              <TableCell className="font-black text-slate-900">£{sale.price.toFixed(2)}</TableCell>
+                              <TableCell className="font-black text-green-600">£{(sale.commission || 0).toFixed(2)}</TableCell>
+                              <TableCell className="text-right pr-8">
+                                <div className="flex items-center justify-end gap-1">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditSale(sale)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-destructive" onClick={() => deleteSale(sale.id!, sale.profileOrigin)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">No matches found for "{searchQuery}".</TableCell></TableRow>
+                        )
                       ) : (
-                        <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">No matches found for "{searchQuery}".</TableCell></TableRow>
-                      )
-                    ) : (
-                      <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">Enter a query above to search the master database.</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                        <TableRow><TableCell colSpan={6} className="h-48 text-center text-slate-400 italic">Enter a query above to search the master database.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              <Card className="w-full lg:w-80 shadow-sm border-none rounded-3xl bg-slate-900 text-white p-8 space-y-6">
+                <div className="flex items-center gap-3">
+                  <BrainCircuit className="w-6 h-6 text-primary" />
+                  <h3 className="text-lg font-black uppercase tracking-tighter">AI Sales Analyst</h3>
+                </div>
+                <p className="text-xs text-white/50 font-bold leading-relaxed">Let AI analyze the day's transactions to find trends and top sellers.</p>
+                <Button 
+                  onClick={handleGenerateSummary} 
+                  disabled={isAiSummarizing || allDailySalesRaw.length === 0}
+                  className="w-full h-12 rounded-2xl bg-primary hover:bg-primary/90 font-black uppercase text-[10px] gap-2"
+                >
+                  {isAiSummarizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Generate Daily Summary
+                </Button>
+
+                {aiSummary && (
+                  <div className="bg-white/5 rounded-2xl p-4 border border-white/10 space-y-3 animate-in fade-in zoom-in-95">
+                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Report for {selectedDate}</p>
+                    <p className="text-xs leading-relaxed text-white/80 font-medium italic">"{aiSummary}"</p>
+                  </div>
+                )}
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="payouts" className="focus-visible:outline-none">
@@ -1734,6 +1805,10 @@ export default function Dashboard() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="rounded-xl p-2 font-bold border-slate-100">
                                 <DropdownMenuItem onClick={() => {
+                                  setSelectedSellerId(seller.id);
+                                  handleProfileSwitch('manager');
+                                }} className="gap-2"><Box className="w-4 h-4" /> Manage Inventory</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
                                   const newComm = prompt("Enter new commission %:", seller.defaultCommission?.toString());
                                   if (newComm !== null) updateSeller(seller.id, { defaultCommission: parseFloat(newComm) });
                                 }} className="gap-2"><Settings2 className="w-4 h-4" /> Edit Commission</DropdownMenuItem>
@@ -1761,6 +1836,57 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+            
+            {profileId === 'manager' && selectedSellerId && (
+              <div className="mt-8 animate-in slide-in-from-bottom-4">
+                 <Card className="bg-white rounded-[3rem] p-10 border-none shadow-sm space-y-6">
+                    <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-4">
+                          <div className="p-3 bg-primary/10 rounded-2xl"><Box className="w-6 h-6 text-primary" /></div>
+                          <div>
+                            <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Inventory Management</h2>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Managing stock for: {sellers.find(s => s.id === selectedSellerId)?.name}</p>
+                          </div>
+                       </div>
+                       <Button variant="ghost" size="icon" onClick={() => setSelectedSellerId("")} className="text-slate-400 hover:text-slate-900"><Trash2 className="w-5 h-5" /></Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                       <div className="space-y-4">
+                          <h3 className="text-xs font-black uppercase text-slate-500">Add Stock Item</h3>
+                          <div className="space-y-3">
+                             <Input placeholder="Card Name..." value={newInventoryName} onChange={(e) => setNewInventoryName(e.target.value)} className="h-11 rounded-xl font-bold" />
+                             <div className="grid grid-cols-2 gap-3">
+                                <Input type="number" placeholder="Price £" value={newInventoryPrice} onChange={(e) => setNewInventoryPrice(e.target.value)} className="h-11 rounded-xl font-black" />
+                                <Input type="number" placeholder="Qty" value={newInventoryQuantity} onChange={(e) => setNewInventoryQuantity(e.target.value)} className="h-11 rounded-xl font-black" />
+                             </div>
+                             <Button onClick={handleAddInventory} className="w-full h-11 rounded-xl bg-primary font-black uppercase text-[10px]">Add to Inventory</Button>
+                          </div>
+                       </div>
+
+                       <div className="lg:col-span-2 space-y-4">
+                          <h3 className="text-xs font-black uppercase text-slate-500">Current Stock Levels</h3>
+                          <ScrollArea className="h-[300px] border rounded-2xl p-4 bg-slate-50">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {inventory.map((item) => (
+                                  <div key={item.id} className="p-4 rounded-xl border bg-white flex justify-between items-center group">
+                                     <div>
+                                        <p className="font-bold text-xs uppercase">{item.name}</p>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase">£{item.price.toFixed(2)} ea &bull; QTY: {item.quantity}</p>
+                                     </div>
+                                     <div className="flex items-center gap-2">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-destructive" onClick={() => deleteInventoryItem(item.id!)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                                     </div>
+                                  </div>
+                                ))}
+                                {inventory.length === 0 && <p className="col-span-2 text-center text-[10px] italic text-slate-300 py-12">No inventory listed for this seller.</p>}
+                             </div>
+                          </ScrollArea>
+                       </div>
+                    </div>
+                 </Card>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       )}
