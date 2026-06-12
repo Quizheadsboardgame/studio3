@@ -774,9 +774,10 @@ export default function Dashboard() {
     if (!seller) return;
 
     const doc = new jsPDF();
+    // Unique ID based on the seller and date combination in the historical dataset
     const uniqueEvents = Array.from(new Set(combinedSalesData.map(s => `${s.sellerId}_${s.saleDate}`))).sort();
     const currentEvent = `${authenticatedSellerId}_${selectedDate}`;
-    const invoiceNum = 1098 + uniqueEvents.indexOf(currentEvent);
+    const invoiceNum = 1130 + uniqueEvents.indexOf(currentEvent);
 
     try {
       const formattedDate = format(parseISO(selectedDate), "EEEE, do MMMM yyyy");
@@ -847,6 +848,11 @@ export default function Dashboard() {
     const today = new Date();
     const monthName = format(today, "MMMM yyyy");
     
+    // Unique ID logic for dividend reports
+    const uniqueMonths = Array.from(new Set(combinedSalesData.map(s => format(parseISO(s.saleDate), "yyyy-MM")))).sort();
+    const currentMonthStr = format(today, "yyyy-MM");
+    const reportNum = 1130 + uniqueMonths.indexOf(currentMonthStr) + 500; // Offset slightly for different report type
+
     // Find last Friday of the current month
     const monthEndObj = endOfMonth(today);
     let payoutDate = monthEndObj;
@@ -870,7 +876,7 @@ export default function Dashboard() {
       doc.setFontSize(22);
       doc.text("Newton's Collectables", 14, 20);
       doc.setFontSize(10);
-      doc.text(`DIVIDEND REPORT - ${monthName.toUpperCase()}`, 196, 20, { align: 'right' });
+      doc.text(`DIVIDEND REPORT #${reportNum}`, 196, 20, { align: 'right' });
       doc.line(14, 33, 196, 33);
       
       doc.setFont(undefined, 'bold');
